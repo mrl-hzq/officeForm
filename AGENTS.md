@@ -71,26 +71,9 @@ docker compose ps
 docker image inspect officeform-web:latest
 ```
 
-## Android/APK Notes
+## Platform Note
 
-- This repo is currently a Flask web application, not an Android Studio/Gradle Android project.
-- There is no APK build step available from this repo by itself.
-- Android Studio only shows **Build** -> **Build Bundle(s) / APK(s)** -> **Build APK(s)** when an Android Gradle project is open.
-- If the **Build APK(s)** menu is missing, it usually means Android Studio opened `C:\Homelab\officeForm` directly. That folder does not contain Android Gradle files, so the APK build menu will not appear.
-- If the goal is to install officeForm on Android, first create or open an Android wrapper project, such as a WebView app or Capacitor/TWA project, then sync Gradle and build the APK from that Android project.
-- If Android Studio does not show **Build APK(s)**, verify that the opened folder contains Android files such as `settings.gradle`, a root `build.gradle`, and an `app/build.gradle`.
-- To continue from the current repo, choose one Android packaging path first:
-  - WebView app: create a small native Android project that opens the hosted officeForm URL, then build the APK there.
-  - Capacitor app: create a separate Capacitor wrapper, copy or serve the frontend, run `npx cap add android`, open the generated `android/` folder in Android Studio, then build the APK.
-  - TWA app: use this only if officeForm is hosted as a PWA over HTTPS.
-- Until one of those wrapper projects exists, use the Flask app normally at `http://127.0.0.1:3000`; Android Studio cannot build this Flask repo into an APK directly.
-- If a user says they cannot see **Build APK(s)** in Android Studio, explain that they likely opened the Flask repo instead of an Android Gradle project. The practical fix is:
-  - Close the current Android Studio project.
-  - Create or open an Android wrapper project first.
-  - Make sure that opened project has `settings.gradle`, a root `build.gradle`, and `app/build.gradle`.
-  - Wait for Gradle sync to finish.
-  - Then use **Build** -> **Build Bundle(s) / APK(s)** -> **Build APK(s)**.
-- For a WebView wrapper, do not point Android at `127.0.0.1` unless the Flask server is running inside the Android device/emulator. Use a reachable LAN or hosted URL instead.
+- This project is a web-only Flask application. There is no Android, iOS, or mobile packaging. Do not suggest or pursue any mobile wrapper approach.
 
 ## Database
 
@@ -196,6 +179,13 @@ Native Windows PDF generation needs LibreOffice available to the bridge path for
 - `app/other_forms.py`: authenticated Others PDF listing plus admin upload/delete.
 - `app/pdf_service.py`: wrapper around form PDF generation scripts.
 - `app/utils.py`: shared parsing, leave, KPI, and profile helpers.
+
+## Lazy PDF Regeneration
+
+- When a submission record exists in the DB but its PDF file is missing from `generated/pdfs/` (e.g. after importing a database dump), the `GET /generated/pdfs/<filename>` route automatically regenerates the PDF on first request.
+- Regeneration reads the submission row, worker snapshot, and form data (`kpi_data`, `leave_summary`) from the DB and calls the same `pdf_service.generate_*` function used at submission time.
+- This only applies to the `pdfs/` subdirectory. Workbooks are not regenerated.
+- If regeneration fails (missing template, broken data, etc.), the route falls through to the normal 404 response.
 
 ## Important Gotchas
 
