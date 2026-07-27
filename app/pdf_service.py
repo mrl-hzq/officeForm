@@ -37,9 +37,9 @@ def generate_al(*, template_path, workbook_path, pdf_path, worker, start_iso, en
             duration_days=duration_days,
             leave_type=leave_type,
             reason=reason,
-            leave_entitlement=int(leave_summary["entitlement"]),
-            leave_taken=int(leave_summary["takenToDate"]),
-            leave_balance=int(leave_summary["balanceAfter"]),
+            leave_entitlement=float(leave_summary["entitlement"]),
+            leave_taken=float(leave_summary["takenToDate"]),
+            leave_balance=float(leave_summary["balanceAfter"]),
             application_date=application_iso,
         )
     finally:

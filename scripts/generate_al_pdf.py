@@ -78,12 +78,12 @@ def generate_al_pdf(
     other_tel: str = "",
     start_date: str,
     end_date: str,
-    duration_days: int,
+    duration_days: float,
     leave_type: str = "annual",
     reason: str = "Annual Leave",
-    leave_entitlement: int = 0,
-    leave_taken: int = 0,
-    leave_balance: int = 0,
+    leave_entitlement: float = 0,
+    leave_taken: float = 0,
+    leave_balance: float = 0,
     application_date: str,
 ) -> None:
     template_path = Path(template_path).resolve()

@@ -79,9 +79,10 @@ def _row_to_submission(row: dict) -> dict:
         "endDate": row.get("end_date").isoformat() if row.get("end_date") else None,
         "calendarStart": row.get("start_date").isoformat() if row.get("start_date") else None,
         "calendarEnd": row.get("end_date").isoformat() if row.get("end_date") else None,
-        "durationDays": row.get("duration_days"),
+        "durationDays": float(row["duration_days"]) if row.get("duration_days") is not None else None,
         "affectsAnnualLeave": bool(row.get("affects_al")),
-        "annualLeaveDaysApplied": row.get("al_days_applied"),
+        "annualLeaveDaysApplied": float(row["al_days_applied"]) if row.get("al_days_applied") is not None else 0,
+        "isHalfDay": bool(row.get("is_half_day")),
         "reason": row.get("reason"),
         "kpiMonth": row.get("kpi_month"),
         "applicationDate": row.get("application_date").isoformat() if row.get("application_date") else None,
@@ -193,7 +194,11 @@ def create_al_submission():
     if not reason:
         return jsonify({"error": "Reason is required."}), 400
 
-    duration_days = (end.date() - start.date()).days + 1
+    is_half_day = body.get("isHalfDay", False)
+    if is_half_day and start.date() != end.date():
+        return jsonify({"error": "Half-day leave must be for a single day."}), 400
+    raw_days = (end.date() - start.date()).days + 1
+    duration_days = 0.5 if is_half_day else float(raw_days)
     affects_al = leave_type in AL_DEDUCTING_LEAVE_TYPES
     annual_leave_days = duration_days if affects_al else 0
     leave_summary = get_leave_summary(worker, annual_leave_days)
@@ -242,13 +247,13 @@ def create_al_submission():
     execute(
         """INSERT INTO submissions
            (id, worker_id, form_type, form_name, leave_type, start_date, end_date,
-            duration_days, affects_al, al_days_applied, reason, application_date,
+            duration_days, affects_al, al_days_applied, is_half_day, reason, application_date,
             leave_summary, worker_snapshot, pdf_file_name, workbook_file_name, created_at)
-           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
         (submission_id, g.worker_id, leave_type_meta["code"], leave_type_meta["name"],
          leave_type, start_iso, end_iso, duration_days, affects_al, annual_leave_days,
-         reason, application_iso, json.dumps(leave_summary), json.dumps(worker_snapshot),
-         pdf_file_name, workbook_file_name, created_at),
+         is_half_day, reason, application_iso, json.dumps(leave_summary),
+         json.dumps(worker_snapshot), pdf_file_name, workbook_file_name, created_at),
     )
 
     row = query_one("SELECT * FROM submissions WHERE id = %s", (submission_id,))
