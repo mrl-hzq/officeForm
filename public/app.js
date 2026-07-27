@@ -1,0 +1,2454 @@
+const themeStorageKey = "officeFormsTheme";
+const defaultTheme = "dark";
+
+function getInitialTheme() {
+  const storedTheme = localStorage.getItem(themeStorageKey);
+  return storedTheme === "light" || storedTheme === "dark" ? storedTheme : defaultTheme;
+}
+
+const state = {
+  worker: null,
+  token: localStorage.getItem("token") || null,
+  theme: getInitialTheme(),
+  submissions: [],
+  calendarEntries: [],
+  otherForms: [],
+  calendarDate: new Date(),
+  selectedForm: "AL",
+  kpiStep: 0,
+  kpiValidationAttempted: false
+};
+
+document.documentElement.dataset.theme = state.theme;
+
+const leaveTypeLabels = {
+  annual: "Annual Leave",
+  unpaid: "Unpaid Leave",
+  emergency: "Emergency Leave",
+  other: "Others"
+};
+
+const alDeductingLeaveTypes = new Set(["annual", "emergency"]);
+const calendarTypeLabels = {
+  AL: "Annual Leave",
+  EL: "Emergency Leave",
+  MC: "Medical Certificate"
+};
+const companyHolidays = [
+  { date: "2026-01-01", name: "Tahun Baru" },
+  { date: "2026-02-01", name: "Thaipusam" },
+  { date: "2026-02-02", name: "Thaipusam (Cuti Gantian)" },
+  { date: "2026-02-17", name: "Tahun Baru Cina" },
+  { date: "2026-02-18", name: "Tahun Baru Cina" },
+  { date: "2026-03-07", name: "Nuzul Quran *" },
+  { date: "2026-03-21", name: "Hari Raya Aidilfitri *" },
+  { date: "2026-03-22", name: "Hari Raya Aidilfitri *" },
+  { date: "2026-03-23", name: "Hari Raya Aidilfitri * (Cuti Gantian)" },
+  { date: "2026-05-01", name: "Hari Pekerja" },
+  { date: "2026-05-27", name: "Hari Raya Aidil Adha *" },
+  { date: "2026-05-31", name: "Hari Wesak" },
+  { date: "2026-06-01", name: "Hari Keputeraan Yang di-Pertuan Agong" },
+  { date: "2026-06-02", name: "Hari Wesak (Cuti Gantian)" },
+  { date: "2026-06-17", name: "Awal Muharam (Maal Hijrah)" },
+  { date: "2026-08-25", name: "Maulidur Rasul" },
+  { date: "2026-08-31", name: "Hari Kemerdekaan" },
+  { date: "2026-09-16", name: "Hari Malaysia" },
+  { date: "2026-11-08", name: "Deepavali" },
+  { date: "2026-11-09", name: "Deepavali (Cuti Gantian)" },
+  { date: "2026-12-11", name: "Hari Keputeraan Sultan Selangor" },
+  { date: "2026-12-25", name: "Hari Krismas" }
+];
+const companyHolidayByDate = new Map(companyHolidays.map(holiday => [holiday.date, holiday]));
+const kpiSections = [
+  {
+    key: "knowledge",
+    title: "Pengetahuan Dan Kemahiran",
+    items: [
+      "Pemahaman teori dan pengetahuan praktikal dalam bidang tugas",
+      "Menggunakan kepakaran untuk menambahbaik tugasan yang diberi",
+      "Berkongsi pengetahuan dan kemahiran dengan ahli pasukan",
+      "Pengetahuan tentang perkara baharu atau perubahan dalam bidang tugas",
+      "Kepatuhan kepada polisi dan prosedur syarikat"
+    ]
+  },
+  {
+    key: "quality",
+    title: "Kualiti Kerja",
+    items: [
+      "Kualiti dan hasil kerja",
+      "Kekemasan dan ketelitian dalam menghasilkan tugas",
+      "Membuat penambahbaikan dalam tugasan",
+      "Kemahiran menulis (laporan/surat/proposal/etc)",
+      "Penggunaan masa untuk menghasilkan tugasan"
+    ]
+  },
+  {
+    key: "problemSolving",
+    title: "Kemahiran Menyelesaikan Masalah",
+    items: [
+      "Kebolehan menyelesaikan masalah dengan cekap",
+      "Kebolehan menyelesaikan masalah tanpa bantuan penyelia",
+      "Kebolehan memberi penerangan kepada jalan penyelesaian",
+      "Menyelesaikan isu dan masalah klien dengan berkesan dan cekap",
+      "Tetap tenang semasa menghadapi konflik"
+    ]
+  },
+  {
+    key: "communication",
+    title: "Kemahiran Berkomunikasi",
+    items: [
+      "Kebolehan menyampaikan sesuatu maklumat",
+      "Kebolehan mendengar dan menerima maklumat dari orang lain",
+      "Bersikap positif ketika berinteraksi",
+      "Mewujudkan suasana harmoni dan mesra semasa berkomunikasi",
+      "Penerimaan terhadap kritikan"
+    ]
+  },
+  {
+    key: "teamwork",
+    title: "Pasukan",
+    items: [
+      "Keupayaan untuk mendengar dan mengikuti arahan",
+      "Bekerjasama dan membantu semasa diperlukan",
+      "Seorang yang komited dan aktif",
+      "Berkomunikasi dan memberikan idea dan cadangan",
+      "Kebolehpercayaan jika diberi tugasan"
+    ]
+  },
+  {
+    key: "initiative",
+    title: "Inisiatif",
+    items: [
+      "Kebolehan bekerja dibawah pengawasan yang minimum",
+      "Kebolehan menentukan keutamaan kerja apabila semuanya penting",
+      "Memaklumkan progress kerja kepada penyelia",
+      "Mencari cara terbaik untuk menyelesaikan tugasan.",
+      "Bersedia untuk menerima kerja tambahan"
+    ]
+  },
+  {
+    key: "continuousLearning",
+    title: "Pembelajaran Berterusan & Pembangunan Kemahiran",
+    items: [
+      "Mempunyai matlamat jelas tentang masa depannya dan berusaha mencapainya",
+      "Menunjukkan semangat belajar yang berterusan",
+      "Mempraktikkan pengetahuan dan kemahiran yang baharu dalam bidang tugas",
+      "Mencari peluang untuk mengembangkan pengetahuan dan kemahiran",
+      "Berterusan menunjukkan kemajuan diri"
+    ]
+  }
+];
+const kpiOptionFields = [
+  { key: "breakfastMeeting", label: "Breakfast Meeting", options: ["Pilih", "Hadir", "Tidak Hadir"] },
+  { key: "emergencyLeaveAttendance", label: "Cuti Kecemasan (EL)", options: ["Pilih", "Tiada", "0.5 Hari", "1 Hari", "1.5 Hari", "2 Hari", "2.5 Hari", "Lebih 3 Hari"] },
+  { key: "medicalLeaveAttendance", label: "Cuti Sakit (MC)", options: ["Pilih", "Tiada", "1 Hari", "2 Hari", "3 Hari", "4 Hari", "5 Hari", "Lebih 6 Hari"] },
+  { key: "biroAgama", label: "Biro Agama", options: ["Pilih", "1", "2", "Tiada"] },
+  { key: "biroSukan", label: "Biro Sukan", options: ["Pilih", "1", "2", "Tiada"] },
+  { key: "trainingHours", label: "Sertai kursus/latihan sekurang-kurangnya 8 jam", options: ["Pilih", "Hadir", "Tiada"] },
+  { key: "committeeRole", label: "Dilantik sebagai ahli jawatankuasa", options: ["Pilih", "Pengerusi", "Naib Pengerusi", "Setiausaha", "AJK", "Tiada"] },
+  { key: "eqariah", label: "Kemaskini aktiviti dalam aplikasi EQariah", options: ["Pilih", "Ya", "Tiada"] }
+];
+const kpiStepOrder = ["overview", ...kpiSections.map(section => section.key), "summary", "feedback"];
+const kpiScoreInstruction = {
+  title: "Panduan skala penilaian",
+  lines: [
+    "Bahagian 1: Faktor Penilaian (80%). Isikan nombor skala dari 1 hingga 5 mengikut ruang yang disediakan.",
+    "5 - Cemerlang: hasil kerja sentiasa mencapai dan melebihi tahap maksimum yang telah ditentukan.",
+    "4 - Baik: hasil kerja kadangkala mencapai tahap maksimum yang telah ditentukan.",
+    "3 - Sederhana: hasil kerja sentiasa melebihi tahap minimum yang telah ditentukan.",
+    "2 - Lemah: hasil kerja kadangkala mencapai tahap minimum yang telah ditentukan.",
+    "1 - Gagal: hasil kerja sentiasa di bawah tahap minimum yang telah ditentukan."
+  ]
+};
+const kpiStepInstructions = {
+  overview: {
+    title: "Panduan borang penilaian",
+    lines: [
+      "Objektif borang: meningkatkan keberkesanan dan produktiviti, membincangkan prestasi dengan penyelia, mengenal pasti kekuatan dan kelemahan, mencadangkan program peningkatan, dan menyokong keputusan HR.",
+      "Panduan penilai: tetapkan standard kerja yang spesifik, boleh diukur, boleh dicapai, realistik dan mempunyai tempoh masa.",
+      "Jelaskan expectation prestasi, beri ruang komunikasi dua hala, dan pastikan penilaian adil serta telus.",
+      "Senarai tugasan boleh disertakan dengan lampiran tambahan jika ruang tidak mencukupi."
+    ]
+  },
+  summary: {
+    title: "Panduan pemarkahan tambahan",
+    lines: [
+      "Bahagian 2: Kehadiran (10%) merangkumi Breakfast Meeting, Cuti Kecemasan (EL), dan Cuti Sakit (MC).",
+      "Bahagian 3: Penglibatan aktiviti Biro (10%) merangkumi Biro Agama dan Biro Sukan.",
+      "Bahagian 4: Nilai Tambah (10%) merangkumi latihan sekurang-kurangnya 8 jam dan peranan jawatankuasa.",
+      "Bahagian 5: E-Qariah (10%) dinilai berdasarkan kemaskini aplikasi sebelum atau pada setiap 15hb."
+    ]
+  },
+  feedback: {
+    title: "Panduan maklumbalas",
+    lines: [
+      "Lengkapkan maklumbalas pekerja, keperluan latihan jika ada, dan maklumbalas penilai selepas semua bahagian pemarkahan diisi.",
+      "Gunakan ruangan ini untuk mencatat tindakan susulan atau cadangan program peningkatan prestasi."
+    ]
+  }
+};
+const kpiOptionInstructions = {
+  breakfastMeeting: "Kehadiran Breakfast Meeting dinilai sebagai sebahagian daripada Bahagian Kehadiran.",
+  emergencyLeaveAttendance: "Rekod Cuti Kecemasan (EL) dinilai sebagai sebahagian daripada Bahagian Kehadiran.",
+  medicalLeaveAttendance: "Rekod Cuti Sakit (MC) dinilai sebagai sebahagian daripada Bahagian Kehadiran.",
+  biroAgama: "BIRO AGAMA = 5%. Kehadiran penuh memerlukan sekurang-kurangnya 2 aktiviti sebulan: Kelas Mengaji Online, Kuliah Mingguan, Bacaan Yasin, atau aktiviti agama persendirian yang dimaklumkan kepada AJK Biro Agama.",
+  biroSukan: "BIRO SUKAN = 5%. Kehadiran penuh memerlukan sekurang-kurangnya 2 aktiviti sebulan: aktiviti berkumpulan, aktiviti lelaki, aktiviti perempuan, atau penggunaan fasiliti gym MSB yang dimaklumkan kepada AJK Biro Sukan.",
+  trainingHours: "Menyertai program latihan sekurang-kurangnya 8 jam dalam sebulan = 5%.",
+  committeeRole: "Dilantik sebagai ahli jawatankuasa ISO, Biro Agama, atau Biro Sukan = 5%.",
+  eqariah: "Kemaskini aplikasi E-Qariah sebelum atau pada setiap 15hb."
+};
+const expenseInitialLineCount = 2;
+const expenseMinLineCount = 1;
+const expenseMaxLineCount = 13;
+const expenseTransportModes = {
+  car: { label: "Car", rate: 0.87 },
+  motorcycle: { label: "Motorcycle", rate: 0.60 }
+};
+const expenseAmountFields = [
+  "totalKm",
+  "parking",
+  "toll",
+  "hotel",
+  "flight",
+  "medical",
+  "phone",
+  "entertainment",
+  "travelAllowance",
+  "misc"
+];
+const expenseColumnLabels = {
+  date: "Date",
+  description: "Description",
+  project: "Project",
+  totalKm: "KM",
+  transportMode: "Transport",
+  parking: "Parking",
+  toll: "Toll",
+  hotel: "Hotel",
+  flight: "Flight",
+  medical: "Medical",
+  phone: "Phone",
+  entertainment: "Ent'ment",
+  travelAllowance: "Travel",
+  misc: "Misc"
+};
+const expenseColumns = [
+  { key: "date", type: "date" },
+  { key: "description", type: "textarea", placeholder: "Travel purpose" },
+  { key: "project", type: "text" },
+  { key: "totalKm", type: "number", step: "0.1" },
+  { key: "transportMode", type: "select" },
+  { key: "parking", type: "number", step: "0.01" },
+  { key: "toll", type: "number", step: "0.01" },
+  { key: "hotel", type: "number", step: "0.01" },
+  { key: "flight", type: "number", step: "0.01" },
+  { key: "medical", type: "number", step: "0.01" },
+  { key: "phone", type: "number", step: "0.01" },
+  { key: "entertainment", type: "number", step: "0.01" },
+  { key: "travelAllowance", type: "number", step: "0.01" },
+  { key: "misc", type: "number", step: "0.01" }
+];
+const otInitialLineCount = 2;
+const otMinLineCount = 1;
+const otMaxLineCount = 17;
+const otRateTypes = {
+  normal: { label: "1.5x (normal day)", multiplier: 1.5 },
+  rest: { label: "2x (rest day)", multiplier: 2 },
+  holiday: { label: "3x (public holiday)", multiplier: 3 }
+};
+const otColumnLabels = {
+  date: "Date",
+  timeFrom: "From",
+  timeTo: "To",
+  rateType: "Rate",
+  hours: "Hours",
+  description: "Description"
+};
+const otColumns = [
+  { key: "date", type: "date" },
+  { key: "timeFrom", type: "text", placeholder: "1800" },
+  { key: "timeTo", type: "text", placeholder: "2200" },
+  { key: "rateType", type: "select" },
+  { key: "hours", type: "readonly" },
+  { key: "description", type: "textarea", placeholder: "Task assigned in detail" }
+];
+const elements = {
+  loginView: document.querySelector("#loginView"),
+  registerView: document.querySelector("#registerView"),
+  profileSetupView: document.querySelector("#profileSetupView"),
+  workspaceView: document.querySelector("#workspaceView"),
+  loginForm: document.querySelector("#loginForm"),
+  workerIdInput: document.querySelector("#workerIdInput"),
+  loginPasswordInput: document.querySelector("#loginPasswordInput"),
+  loginMessage: document.querySelector("#loginMessage"),
+  showRegisterButton: document.querySelector("#showRegisterButton"),
+  showLoginButton: document.querySelector("#showLoginButton"),
+  registerForm: document.querySelector("#registerForm"),
+  registerWorkerIdInput: document.querySelector("#registerWorkerIdInput"),
+  registerPasswordInput: document.querySelector("#registerPasswordInput"),
+  registerMessage: document.querySelector("#registerMessage"),
+  profileSetupForm: document.querySelector("#profileSetupForm"),
+  setupNameInput: document.querySelector("#setupNameInput"),
+  setupDesignationInput: document.querySelector("#setupDesignationInput"),
+  setupDepartmentInput: document.querySelector("#setupDepartmentInput"),
+  setupHouseTelInput: document.querySelector("#setupHouseTelInput"),
+  setupOtherTelInput: document.querySelector("#setupOtherTelInput"),
+  setupEvaluatorNameInput: document.querySelector("#setupEvaluatorNameInput"),
+  setupEntitlementInput: document.querySelector("#setupEntitlementInput"),
+  setupEmploymentTypeInput: document.querySelector("#setupEmploymentTypeInput"),
+  setupEmploymentStartDateInput: document.querySelector("#setupEmploymentStartDateInput"),
+  setupEmploymentEndDateInput: document.querySelector("#setupEmploymentEndDateInput"),
+  saveProfileSetupButton: document.querySelector("#saveProfileSetupButton"),
+  profileSetupMessage: document.querySelector("#profileSetupMessage"),
+  workerName: document.querySelector("#workerName"),
+  workerIdBadge: document.querySelector("#workerIdBadge"),
+  workerDesignation: document.querySelector("#workerDesignation"),
+  logoutButton: document.querySelector("#logoutButton"),
+  themeToggles: document.querySelectorAll("[data-theme-toggle]"),
+  tabs: document.querySelectorAll(".tab"),
+  panels: document.querySelectorAll(".panel"),
+  formCards: document.querySelector("#formCards"),
+  formAreas: document.querySelectorAll("[data-form-area]"),
+  profileName: document.querySelector("#profileName"),
+  profileDesignation: document.querySelector("#profileDesignation"),
+  profileHouseTel: document.querySelector("#profileHouseTel"),
+  profileOtherPhone: document.querySelector("#profileOtherPhone"),
+  profileBalance: document.querySelector("#profileBalance"),
+  profileForm: document.querySelector("#profileForm"),
+  profileWorkerIdInput: document.querySelector("#profileWorkerIdInput"),
+  profileNameInput: document.querySelector("#profileNameInput"),
+  profileDesignationInput: document.querySelector("#profileDesignationInput"),
+  profileDepartmentInput: document.querySelector("#profileDepartmentInput"),
+  profileHouseTelInput: document.querySelector("#profileHouseTelInput"),
+  profileOtherTelInput: document.querySelector("#profileOtherTelInput"),
+  profileEvaluatorNameInput: document.querySelector("#profileEvaluatorNameInput"),
+  profileEntitlementInput: document.querySelector("#profileEntitlementInput"),
+  profileEmploymentTypeInput: document.querySelector("#profileEmploymentTypeInput"),
+  profileEmploymentStartDateInput: document.querySelector("#profileEmploymentStartDateInput"),
+  profileEmploymentEndDateInput: document.querySelector("#profileEmploymentEndDateInput"),
+  profilePeriodReadout: document.querySelector("#profilePeriodReadout"),
+  profileTakenReadout: document.querySelector("#profileTakenReadout"),
+  profileBalanceReadout: document.querySelector("#profileBalanceReadout"),
+  saveProfileButton: document.querySelector("#saveProfileButton"),
+  profileMessage: document.querySelector("#profileMessage"),
+  kpiTrackerTitle: document.querySelector("#kpiTrackerTitle"),
+  kpiTrackerGrid: document.querySelector("#kpiTrackerGrid"),
+  alForm: document.querySelector("#alForm"),
+  startDateInput: document.querySelector("#startDateInput"),
+  endDateInput: document.querySelector("#endDateInput"),
+  leaveTypeInputs: document.querySelectorAll("input[name='leaveType']"),
+  leaveReasonInput: document.querySelector("#leaveReasonInput"),
+  durationValue: document.querySelector("#durationValue"),
+  selectedLeaveTypeValue: document.querySelector("#selectedLeaveTypeValue"),
+  balanceAfterLabel: document.querySelector("#balanceAfterLabel"),
+  balanceAfterValue: document.querySelector("#balanceAfterValue"),
+  generateButton: document.querySelector("#generateButton"),
+  formMessage: document.querySelector("#formMessage"),
+  mcForm: document.querySelector("#mcForm"),
+  mcStartDateInput: document.querySelector("#mcStartDateInput"),
+  mcEndDateInput: document.querySelector("#mcEndDateInput"),
+  mcReasonInput: document.querySelector("#mcReasonInput"),
+  mcDurationValue: document.querySelector("#mcDurationValue"),
+  mcGenerateButton: document.querySelector("#mcGenerateButton"),
+  mcFormMessage: document.querySelector("#mcFormMessage"),
+  kpiForm: document.querySelector("#kpiForm"),
+  kpiMonthInput: document.querySelector("#kpiMonthInput"),
+  kpiEvaluatorInput: document.querySelector("#kpiEvaluatorInput"),
+  kpiTaskListInput: document.querySelector("#kpiTaskListInput"),
+  kpiSectionsContainer: document.querySelector("#kpiSectionsContainer"),
+  kpiOptionsContainer: document.querySelector("#kpiOptionsContainer"),
+  kpiOverviewInstruction: document.querySelector("#kpiOverviewInstruction"),
+  kpiSummaryInstruction: document.querySelector("#kpiSummaryInstruction"),
+  kpiFeedbackInstruction: document.querySelector("#kpiFeedbackInstruction"),
+  kpiStepLabel: document.querySelector("#kpiStepLabel"),
+  kpiStepProgress: document.querySelector("#kpiStepProgress"),
+  kpiPrevButton: document.querySelector("#kpiPrevButton"),
+  kpiNextButton: document.querySelector("#kpiNextButton"),
+  kpiWorkerFeedbackInput: document.querySelector("#kpiWorkerFeedbackInput"),
+  kpiTrainingNeedsInput: document.querySelector("#kpiTrainingNeedsInput"),
+  kpiEvaluatorFeedbackInput: document.querySelector("#kpiEvaluatorFeedbackInput"),
+  kpiGenerateButton: document.querySelector("#kpiGenerateButton"),
+  kpiFormMessage: document.querySelector("#kpiFormMessage"),
+  expenseForm: document.querySelector("#expenseForm"),
+  expenseMonthInput: document.querySelector("#expenseMonthInput"),
+  expenseSiteInput: document.querySelector("#expenseSiteInput"),
+  expenseSupervisorInput: document.querySelector("#expenseSupervisorInput"),
+  expenseAdvancesInput: document.querySelector("#expenseAdvancesInput"),
+  expenseLinesBody: document.querySelector("#expenseLinesBody"),
+  expenseAddLineButton: document.querySelector("#expenseAddLineButton"),
+  expenseRemoveLineButton: document.querySelector("#expenseRemoveLineButton"),
+  expenseLineCountValue: document.querySelector("#expenseLineCountValue"),
+  expenseTotalValue: document.querySelector("#expenseTotalValue"),
+  expenseReimburseValue: document.querySelector("#expenseReimburseValue"),
+  expenseGenerateButton: document.querySelector("#expenseGenerateButton"),
+  expenseFormMessage: document.querySelector("#expenseFormMessage"),
+  otForm: document.querySelector("#otForm"),
+  otMonthInput: document.querySelector("#otMonthInput"),
+  otLinesBody: document.querySelector("#otLinesBody"),
+  otAddLineButton: document.querySelector("#otAddLineButton"),
+  otRemoveLineButton: document.querySelector("#otRemoveLineButton"),
+  otLineCountValue: document.querySelector("#otLineCountValue"),
+  otTotalHoursValue: document.querySelector("#otTotalHoursValue"),
+  otRateSplitValue: document.querySelector("#otRateSplitValue"),
+  otGenerateButton: document.querySelector("#otGenerateButton"),
+  otFormMessage: document.querySelector("#otFormMessage"),
+  calendarTitle: document.querySelector("#calendarTitle"),
+  calendarGrid: document.querySelector("#calendarGrid"),
+  holidayList: document.querySelector("#holidayList"),
+  previousMonthButton: document.querySelector("#previousMonthButton"),
+  todayButton: document.querySelector("#todayButton"),
+  nextMonthButton: document.querySelector("#nextMonthButton"),
+  historyRows: document.querySelector("#historyRows"),
+  historyMessage: document.querySelector("#historyMessage"),
+  otherFormCards: document.querySelector("#otherFormCards"),
+  otherPdfTitle: document.querySelector("#otherPdfTitle"),
+  otherPdfOpenLink: document.querySelector("#otherPdfOpenLink"),
+  otherPdfViewer: document.querySelector("#otherPdfViewer"),
+  otherAdminPanel: document.querySelector("#otherAdminPanel"),
+  otherUploadForm: document.querySelector("#otherUploadForm"),
+  otherUploadInput: document.querySelector("#otherUploadInput"),
+  otherUploadButton: document.querySelector("#otherUploadButton"),
+  otherAdminRows: document.querySelector("#otherAdminRows"),
+  otherAdminMessage: document.querySelector("#otherAdminMessage")
+};
+
+const profileSetupStandardFields = [
+  { input: elements.setupNameInput, options: { isName: true } },
+  { input: elements.setupDesignationInput },
+  { input: elements.setupDepartmentInput },
+  { input: elements.setupEvaluatorNameInput, options: { isName: true } }
+];
+
+const profileEditStandardFields = [
+  { input: elements.profileNameInput, options: { isName: true } },
+  { input: elements.profileDesignationInput },
+  { input: elements.profileDepartmentInput },
+  { input: elements.profileEvaluatorNameInput, options: { isName: true } }
+];
+
+function standardizeFieldGroup(fields) {
+  fields.forEach(({ input, options }) => standardizeInputValue(input, options));
+}
+
+[...profileSetupStandardFields, ...profileEditStandardFields].forEach(({ input, options }) => {
+  input?.addEventListener("blur", () => standardizeInputValue(input, options));
+});
+
+function todayIso() {
+  const now = new Date();
+  return toIsoDate(now);
+}
+
+function toIsoDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseIsoDate(value) {
+  return new Date(`${value}T00:00:00`);
+}
+
+function formatDate(value) {
+  if (!value) {
+    return "-";
+  }
+  return parseIsoDate(value).toLocaleDateString(undefined, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  });
+}
+
+function formatShortDate(value) {
+  return parseIsoDate(value).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short"
+  });
+}
+
+function monthInputValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
+function formatMonthLabel(value) {
+  if (!value) {
+    return "-";
+  }
+  const [yearText, monthText] = value.split("-");
+  const year = Number(yearText);
+  const monthIndex = Number(monthText) - 1;
+  return new Date(year, monthIndex, 1).toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric"
+  });
+}
+
+function formatDays(value) {
+  const number = Number(value || 0);
+  return `${number} ${number === 1 ? "day" : "days"}`;
+}
+
+function formatCurrency(value) {
+  return `RM ${Number(value || 0).toFixed(2)}`;
+}
+
+function getSelectedLeaveType() {
+  const selected = document.querySelector("input[name='leaveType']:checked");
+  return selected ? selected.value : "";
+}
+
+function getLeaveDisplay(item) {
+  return item.leaveTypeLabel || item.formName || item.formType || "-";
+}
+
+function getSubmissionPeriodLabel(item) {
+  if (item.periodLabel) {
+    return item.periodLabel;
+  }
+  return `${formatDate(item.startDate)} to ${formatDate(item.endDate)}`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, char => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;"
+  }[char]));
+}
+
+const profileNameParticles = new Set(["bin", "binti", "bt", "ibn", "al", "a/l", "a/p"]);
+const profileTextAcronyms = new Set([
+  "AL",
+  "CEO",
+  "CFO",
+  "COO",
+  "CTO",
+  "DB",
+  "EL",
+  "HR",
+  "HSE",
+  "IT",
+  "KPI",
+  "MC",
+  "PDF",
+  "QA",
+  "QC",
+  "R&D",
+  "SQL"
+]);
+
+function standardizeProfileToken(token, { isName = false, isFirst = false } = {}) {
+  const lowerToken = String(token || "").toLowerCase();
+  const upperToken = lowerToken.toUpperCase();
+  if (isName && !isFirst && profileNameParticles.has(lowerToken)) {
+    return lowerToken;
+  }
+  if (profileTextAcronyms.has(upperToken)) {
+    return upperToken;
+  }
+
+  return lowerToken
+    .split(/([-/'&])/)
+    .map(part => {
+      if (!part || "-/'&".includes(part)) {
+        return part;
+      }
+      const upperPart = part.toUpperCase();
+      if (profileTextAcronyms.has(upperPart)) {
+        return upperPart;
+      }
+      return `${part.charAt(0).toUpperCase()}${part.slice(1)}`;
+    })
+    .join("");
+}
+
+function standardizeProfileText(value, options = {}) {
+  const cleaned = String(value || "").trim().replace(/\s+/g, " ");
+  if (!cleaned) {
+    return "";
+  }
+  return cleaned
+    .split(" ")
+    .map((token, index) => standardizeProfileToken(token, {
+      ...options,
+      isFirst: index === 0
+    }))
+    .join(" ");
+}
+
+function standardizeInputValue(input, options = {}) {
+  if (!input) {
+    return "";
+  }
+  input.value = standardizeProfileText(input.value, options);
+  return input.value;
+}
+
+function getExpenseMileageRate(transportMode) {
+  return expenseTransportModes[transportMode]?.rate ?? expenseTransportModes.car.rate;
+}
+
+function getCalendarDisplayName(name, workerId = "") {
+  const parts = String(name || workerId || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) {
+    return "-";
+  }
+
+  const connectorIndex = parts.findIndex(part =>
+    ["bin", "binti", "bt", "a/l", "a/p"].includes(part.toLowerCase())
+  );
+  if (connectorIndex > 0) {
+    return parts[connectorIndex - 1];
+  }
+
+  return parts[0];
+}
+
+function getCalendarType(item) {
+  if (item.formType === "MC") {
+    return "MC";
+  }
+  if (item.formType === "EL" || item.leaveType === "emergency") {
+    return "EL";
+  }
+  return "AL";
+}
+
+function setMessage(element, text, type = "") {
+  element.textContent = text;
+  element.className = `message ${type}`.trim();
+}
+
+function renderThemeButtons() {
+  const isDark = state.theme === "dark";
+  elements.themeToggles.forEach(button => {
+    button.textContent = isDark ? "Light mode" : "Dark mode";
+    button.setAttribute("aria-label", isDark ? "Switch to light mode" : "Switch to dark mode");
+    button.setAttribute("aria-pressed", String(isDark));
+  });
+}
+
+function applyTheme(theme, options = {}) {
+  const nextTheme = theme === "light" ? "light" : "dark";
+  state.theme = nextTheme;
+  document.documentElement.dataset.theme = nextTheme;
+  if (options.persist !== false) {
+    localStorage.setItem(themeStorageKey, nextTheme);
+  }
+  renderThemeButtons();
+}
+
+function toggleTheme() {
+  applyTheme(state.theme === "dark" ? "light" : "dark");
+}
+
+function renderInstructionPanel(instruction) {
+  return `
+    <div class="instruction-panel">
+      <strong>${escapeHtml(instruction.title)}</strong>
+      <ul>
+        ${instruction.lines.map(line => `<li>${escapeHtml(line)}</li>`).join("")}
+      </ul>
+    </div>
+  `;
+}
+
+function renderKpiStaticInstructions() {
+  elements.kpiOverviewInstruction.innerHTML = renderInstructionPanel(kpiStepInstructions.overview);
+  elements.kpiSummaryInstruction.innerHTML = renderInstructionPanel(kpiStepInstructions.summary);
+  elements.kpiFeedbackInstruction.innerHTML = renderInstructionPanel(kpiStepInstructions.feedback);
+}
+
+function renderKpiScoreChoices(sectionKey, index) {
+  return [5, 4, 3, 2, 1]
+    .map(score => {
+      const id = `kpiScore-${sectionKey}-${index}-${score}`;
+      return `
+        <label class="kpi-score-choice" for="${id}">
+          <input
+            id="${id}"
+            name="kpiScore-${sectionKey}-${index}"
+            type="radio"
+            value="${score}"
+            data-kpi-score="${sectionKey}"
+            data-kpi-score-index="${index}"
+            required
+          >
+          <span>${score}</span>
+        </label>
+      `;
+    })
+    .join("");
+}
+
+function renderKpiSections() {
+  elements.kpiSectionsContainer.innerHTML = kpiSections
+    .map(section => `
+      <section class="kpi-step kpi-section hidden" data-kpi-step="${section.key}">
+        <div class="section-heading compact-heading">
+          <div>
+            <p class="eyebrow">Factor</p>
+            <h2>${section.title}</h2>
+          </div>
+        </div>
+        ${renderInstructionPanel(kpiScoreInstruction)}
+        <div class="kpi-score-list">
+          ${section.items
+            .map((item, index) => `
+              <div class="kpi-score-row">
+                <div class="kpi-score-copy">${item}</div>
+                <fieldset class="kpi-score-picker">
+                  <legend>Score</legend>
+                  <div class="kpi-score-choices">
+                    ${renderKpiScoreChoices(section.key, index)}
+                  </div>
+                </fieldset>
+              </div>
+            `)
+            .join("")}
+        </div>
+        <label>
+          Comment
+          <textarea data-kpi-comment="${section.key}" rows="3" placeholder="Optional section comment"></textarea>
+        </label>
+      </section>
+    `)
+    .join("");
+}
+
+function renderKpiOptions() {
+  elements.kpiOptionsContainer.innerHTML = kpiOptionFields
+    .map(field => `
+      <label class="kpi-option-field">
+        ${field.label}
+        <span class="field-instruction">${escapeHtml(kpiOptionInstructions[field.key] || "")}</span>
+        <select data-kpi-option="${field.key}" required>
+          ${field.options.map(option => `<option value="${option}">${option}</option>`).join("")}
+        </select>
+      </label>
+    `)
+    .join("");
+}
+
+function renderFormAreas() {
+  const selectedForm = state.selectedForm;
+  elements.formCards.querySelectorAll("[data-form-id]").forEach(card => {
+    card.classList.toggle("active", card.dataset.formId === selectedForm);
+  });
+
+  elements.formAreas.forEach(area => {
+    area.classList.toggle("hidden", area.dataset.formArea !== selectedForm);
+  });
+}
+
+function getOtherFormUrl(form) {
+  return form.url || `/others/${encodeURIComponent(form.fileName)}`;
+}
+
+function renderOtherForms() {
+  const selectedForm = state.otherForms[0];
+  const isAdmin = state.worker?.role === "admin";
+  elements.otherAdminPanel.classList.toggle("hidden", !isAdmin);
+
+  if (!selectedForm) {
+    elements.otherFormCards.innerHTML = "";
+    elements.otherPdfTitle.textContent = "PDF Viewer";
+    elements.otherPdfOpenLink.removeAttribute("href");
+    elements.otherPdfViewer.removeAttribute("src");
+    renderOtherAdminRows();
+    return;
+  }
+
+  elements.otherFormCards.innerHTML = state.otherForms
+    .map(form => `
+      <button
+        class="form-card ready ${form.id === selectedForm.id ? "active" : ""}"
+        type="button"
+        data-other-form-id="${form.id}"
+      >
+        <strong>${escapeHtml(form.name)}</strong>
+        <span>PDF</span>
+      </button>
+    `)
+    .join("");
+  selectOtherForm(selectedForm.id);
+  renderOtherAdminRows();
+}
+
+function selectOtherForm(formId) {
+  const selectedForm = state.otherForms.find(form => form.id === formId) || state.otherForms[0];
+  if (!selectedForm) {
+    return;
+  }
+
+  const pdfUrl = getOtherFormUrl(selectedForm);
+  elements.otherFormCards.querySelectorAll("[data-other-form-id]").forEach(card => {
+    card.classList.toggle("active", card.dataset.otherFormId === selectedForm.id);
+  });
+  elements.otherPdfTitle.textContent = selectedForm.name;
+  elements.otherPdfOpenLink.href = pdfUrl;
+  elements.otherPdfViewer.src = pdfUrl;
+}
+
+function renderOtherAdminRows() {
+  if (!elements.otherAdminRows) {
+    return;
+  }
+
+  if (state.worker?.role !== "admin") {
+    elements.otherAdminRows.innerHTML = "";
+    setMessage(elements.otherAdminMessage, "");
+    return;
+  }
+
+  if (state.otherForms.length === 0) {
+    elements.otherAdminRows.innerHTML = "";
+    return;
+  }
+
+  elements.otherAdminRows.innerHTML = state.otherForms
+    .map(form => `
+      <div class="other-admin-row">
+        <span title="${escapeHtml(form.fileName)}">${escapeHtml(form.name)}</span>
+        <button class="danger-button" type="button" data-delete-other-form="${escapeHtml(form.fileName)}">
+          Remove
+        </button>
+      </div>
+    `)
+    .join("");
+}
+
+function getKpiStepTitle(stepKey) {
+  if (stepKey === "overview") {
+    return "Overview";
+  }
+  if (stepKey === "summary") {
+    return "Summary";
+  }
+  if (stepKey === "feedback") {
+    return "Feedback";
+  }
+  const section = kpiSections.find(item => item.key === stepKey);
+  return section ? section.title : "KPI";
+}
+
+function isKpiOverviewComplete() {
+  return Boolean(
+    elements.kpiMonthInput.value &&
+    elements.kpiEvaluatorInput.value.trim() &&
+    elements.kpiTaskListInput.value.trim()
+  );
+}
+
+function isKpiScoreSectionComplete(sectionKey) {
+  const section = kpiSections.find(item => item.key === sectionKey);
+  if (!section) {
+    return true;
+  }
+
+  return section.items.every((_, index) =>
+    Boolean(
+      elements.kpiSectionsContainer.querySelector(
+        `[data-kpi-score="${sectionKey}"][data-kpi-score-index="${index}"]:checked`
+      )
+    )
+  );
+}
+
+function isKpiSummaryComplete() {
+  return kpiOptionFields.every(field => {
+    const input = elements.kpiOptionsContainer.querySelector(`[data-kpi-option="${field.key}"]`);
+    return input && input.value && input.value !== "Pilih";
+  });
+}
+
+function isKpiStepComplete(stepKey) {
+  if (stepKey === "overview") {
+    return isKpiOverviewComplete();
+  }
+  if (stepKey === "summary") {
+    return isKpiSummaryComplete();
+  }
+  if (stepKey === "feedback") {
+    return true;
+  }
+  return isKpiScoreSectionComplete(stepKey);
+}
+
+function getFirstIncompleteKpiStepIndex() {
+  return kpiStepOrder.findIndex(stepKey => !isKpiStepComplete(stepKey));
+}
+
+function getIncompleteKpiStepIndexes() {
+  return kpiStepOrder
+    .map((stepKey, index) => (isKpiStepComplete(stepKey) ? null : index))
+    .filter(index => index !== null);
+}
+
+function formatKpiStepNumbers(stepIndexes) {
+  return stepIndexes.map(index => index + 1).join(", ");
+}
+
+function renderKpiStepProgress() {
+  elements.kpiStepProgress.innerHTML = kpiStepOrder
+    .map((stepKey, index) => {
+      const stepNumber = index + 1;
+      const stateClass = index < state.kpiStep ? "complete" : index === state.kpiStep ? "active" : "upcoming";
+      const isIncomplete = state.kpiValidationAttempted && !isKpiStepComplete(stepKey);
+      const validationClass = isIncomplete ? "incomplete" : "";
+      const title = getKpiStepTitle(stepKey);
+      const validationLabel = isIncomplete ? " incomplete" : "";
+      return `
+        <button
+          class="kpi-step-marker ${stateClass} ${validationClass}"
+          type="button"
+          data-kpi-step-index="${index}"
+          title="${escapeHtml(title)}"
+          aria-label="Go to step ${stepNumber}: ${escapeHtml(title)}${validationLabel}"
+          aria-invalid="${isIncomplete ? "true" : "false"}"
+          ${index === state.kpiStep ? 'aria-current="step"' : ""}
+        >
+          <span>${stepNumber}</span>
+        </button>
+      `;
+    })
+    .join("");
+}
+
+function renderKpiWizard() {
+  const currentStep = kpiStepOrder[state.kpiStep] || "overview";
+  elements.kpiStepLabel.textContent = `${state.kpiStep + 1}/${kpiStepOrder.length} ${getKpiStepTitle(currentStep)}`;
+  renderKpiStepProgress();
+  document.querySelectorAll("[data-kpi-step]").forEach(step => {
+    step.classList.toggle("hidden", step.dataset.kpiStep !== currentStep);
+  });
+  elements.kpiPrevButton.disabled = state.kpiStep === 0;
+  const isLast = state.kpiStep === kpiStepOrder.length - 1;
+  elements.kpiNextButton.classList.toggle("hidden", isLast);
+  elements.kpiGenerateButton.classList.toggle("hidden", !isLast);
+}
+
+async function api(path, options = {}) {
+  const authHeaders = state.token ? { "authorization": `Bearer ${state.token}` } : {};
+  const headers = {
+    ...authHeaders,
+    ...(options.headers || {})
+  };
+  if (!(options.body instanceof FormData) && !headers["content-type"] && !headers["Content-Type"]) {
+    headers["content-type"] = "application/json";
+  }
+  const response = await fetch(path, {
+    headers,
+    ...options
+  });
+
+  const payload = await response.json().catch(() => ({}));
+
+  if (response.status === 401) {
+    clearAuth();
+    showView("login");
+    throw new Error(payload.error || "Session expired. Please log in again.");
+  }
+
+  if (!response.ok) {
+    throw new Error(payload.error || "Request failed.");
+  }
+
+  return payload;
+}
+
+function clearAuth() {
+  state.token = null;
+  state.worker = null;
+  state.submissions = [];
+  state.otherForms = [];
+  localStorage.removeItem("token");
+}
+
+function showView(view) {
+  elements.loginView.classList.toggle("hidden", view !== "login");
+  elements.registerView.classList.toggle("hidden", view !== "register");
+  elements.profileSetupView.classList.toggle("hidden", view !== "profileSetup");
+  elements.workspaceView.classList.toggle("hidden", view !== "workspace");
+
+  if (view === "profileSetup") {
+    updateSetupEmploymentDateFields();
+  }
+}
+
+async function refreshWorkerProfile(options = {}) {
+  const { resetDates = false } = options;
+  const { worker } = await api(`/api/workers/${encodeURIComponent(state.worker.workerId)}`);
+  state.worker = worker;
+  renderWorker({ resetDates });
+}
+
+function inclusiveDayCount(startDate, endDate) {
+  const oneDay = 24 * 60 * 60 * 1000;
+  return Math.round((endDate.getTime() - startDate.getTime()) / oneDay) + 1;
+}
+
+function calculateAl() {
+  const startValue = elements.startDateInput.value;
+  const endValue = elements.endDateInput.value || startValue;
+
+  if (!startValue || !endValue || !state.worker) {
+    return null;
+  }
+
+  const start = parseIsoDate(startValue);
+  const end = parseIsoDate(endValue);
+
+  if (end < start) {
+    elements.durationValue.textContent = "Invalid range";
+    elements.balanceAfterValue.textContent = "-";
+    return null;
+  }
+
+  const durationDays = inclusiveDayCount(start, end);
+  const balanceBefore = Number(state.worker.annualLeaveBalance || 0);
+  const leaveType = getSelectedLeaveType();
+  const affectsAnnualLeave = alDeductingLeaveTypes.has(leaveType);
+  const balanceAfter = affectsAnnualLeave ? Math.max(balanceBefore - durationDays, 0) : balanceBefore;
+
+  elements.durationValue.textContent = `${durationDays} ${durationDays === 1 ? "day" : "days"}`;
+  elements.balanceAfterLabel.textContent = affectsAnnualLeave ? "AL balance after" : "AL balance";
+  elements.balanceAfterValue.textContent = affectsAnnualLeave ? `${balanceAfter} days` : `${balanceBefore} days (unchanged)`;
+  elements.selectedLeaveTypeValue.textContent = leaveTypeLabels[leaveType] || "-";
+
+  return {
+    startDate: startValue,
+    endDate: endValue,
+    durationDays,
+    leaveType,
+    affectsAnnualLeave,
+    balanceAfter
+  };
+}
+
+function calculateMc() {
+  const startValue = elements.mcStartDateInput.value;
+  const endValue = elements.mcEndDateInput.value || startValue;
+
+  if (!startValue || !endValue) {
+    return null;
+  }
+
+  const start = parseIsoDate(startValue);
+  const end = parseIsoDate(endValue);
+
+  if (end < start) {
+    elements.mcDurationValue.textContent = "Invalid range";
+    return null;
+  }
+
+  const durationDays = inclusiveDayCount(start, end);
+  elements.mcDurationValue.textContent = `${durationDays} ${durationDays === 1 ? "day" : "days"}`;
+
+  return {
+    startDate: startValue,
+    endDate: endValue,
+    durationDays
+  };
+}
+
+function renderExpenseInput(rowIndex, column) {
+  const label = expenseColumnLabels[column.key];
+  const commonAttributes = `
+    data-expense-row="${rowIndex}"
+    data-expense-field="${column.key}"
+    aria-label="${escapeHtml(label)}"
+  `;
+  let control = "";
+  if (column.type === "select") {
+    control = `
+      <select ${commonAttributes}>
+        ${Object.entries(expenseTransportModes).map(([value, mode]) => `
+          <option value="${value}" ${value === "car" ? "selected" : ""}>${escapeHtml(mode.label)}</option>
+        `).join("")}
+      </select>
+    `;
+  } else if (column.type === "textarea") {
+    control = `
+      <textarea
+        ${commonAttributes}
+        class="expense-description-input"
+        rows="1"
+        ${column.placeholder ? `placeholder="${escapeHtml(column.placeholder)}"` : ""}
+      ></textarea>
+    `;
+  } else {
+    control = `
+      <input
+        ${commonAttributes}
+        type="${column.type}"
+        ${column.type === "number" ? `min="0" step="${column.step}"` : ""}
+        ${column.placeholder ? `placeholder="${escapeHtml(column.placeholder)}"` : ""}
+      >
+    `;
+  }
+
+  return `
+    <label class="expense-field expense-field-${column.key}">
+      <span>${label}</span>
+      ${control}
+    </label>
+  `;
+}
+
+function renderExpenseHeader() {
+  return `
+    <div class="expense-sheet-row expense-sheet-header" aria-hidden="true">
+      <div>#</div>
+      ${expenseColumns.map(column => `<div>${escapeHtml(expenseColumnLabels[column.key])}</div>`).join("")}
+    </div>
+  `;
+}
+
+function renderExpenseRow(rowIndex) {
+  return `
+    <section class="expense-sheet-row expense-line-card" data-expense-line="${rowIndex}" aria-label="Expense row ${rowIndex + 1}">
+      <div class="expense-line-title">
+        <strong>${rowIndex + 1}</strong>
+      </div>
+      ${expenseColumns.map(column => renderExpenseInput(rowIndex, column)).join("")}
+    </section>
+  `;
+}
+
+function updateExpenseLineControls() {
+  const lineCount = elements.expenseLinesBody.querySelectorAll("[data-expense-line]").length;
+  elements.expenseAddLineButton.disabled = lineCount >= expenseMaxLineCount;
+  elements.expenseAddLineButton.textContent = lineCount >= expenseMaxLineCount ? "Max rows" : "+ Add row";
+  elements.expenseRemoveLineButton.disabled = lineCount <= expenseMinLineCount;
+}
+
+function renderExpenseRows() {
+  elements.expenseLinesBody.innerHTML = renderExpenseHeader() + Array.from(
+    { length: expenseInitialLineCount },
+    (_, rowIndex) => renderExpenseRow(rowIndex)
+  ).join("");
+  updateExpenseLineControls();
+  resizeExpenseDescriptions();
+}
+
+function addExpenseRow() {
+  const lineCount = elements.expenseLinesBody.querySelectorAll("[data-expense-line]").length;
+  if (lineCount >= expenseMaxLineCount) {
+    return;
+  }
+  elements.expenseLinesBody.insertAdjacentHTML("beforeend", renderExpenseRow(lineCount));
+  updateExpenseLineControls();
+  resizeExpenseDescriptions(elements.expenseLinesBody.querySelector(`[data-expense-line="${lineCount}"]`));
+  calculateExpenses();
+}
+
+function removeExpenseRow() {
+  const lineCount = elements.expenseLinesBody.querySelectorAll("[data-expense-line]").length;
+  if (lineCount <= expenseMinLineCount) {
+    return;
+  }
+
+  elements.expenseLinesBody.querySelector(`[data-expense-line="${lineCount - 1}"]`)?.remove();
+  updateExpenseLineControls();
+  calculateExpenses();
+}
+
+function getExpenseLineInputs(rowIndex) {
+  return [...elements.expenseLinesBody.querySelectorAll(`[data-expense-row="${rowIndex}"]`)];
+}
+
+function resizeExpenseDescription(textarea) {
+  textarea.style.height = "auto";
+  textarea.style.height = `${Math.max(textarea.scrollHeight, 34)}px`;
+}
+
+function resizeExpenseDescriptions(scope = elements.expenseLinesBody) {
+  scope.querySelectorAll(".expense-description-input").forEach(resizeExpenseDescription);
+}
+
+function collectExpenseItems() {
+  const items = [];
+  const lineCount = elements.expenseLinesBody.querySelectorAll("[data-expense-line]").length;
+  for (let rowIndex = 0; rowIndex < lineCount; rowIndex += 1) {
+    const inputs = getExpenseLineInputs(rowIndex);
+    const item = {};
+    inputs.forEach(input => {
+      item[input.dataset.expenseField] = input.value.trim();
+    });
+    if (!expenseTransportModes[item.transportMode]) {
+      item.transportMode = "car";
+    }
+
+    const hasText = Boolean(item.date || item.description || item.project);
+    const hasAmount = expenseAmountFields.some(field => Number(item[field] || 0) > 0);
+    if (!hasText && !hasAmount) {
+      continue;
+    }
+    items.push(item);
+  }
+  return items;
+}
+
+function calculateExpenses() {
+  const items = collectExpenseItems();
+  const advances = Number(elements.expenseAdvancesInput.value || 0);
+  const totalAmount = items.reduce((sum, item) => {
+    const mileage = Number(item.totalKm || 0) * getExpenseMileageRate(item.transportMode);
+    const directAmount = expenseAmountFields
+      .filter(field => field !== "totalKm")
+      .reduce((amountSum, field) => amountSum + Number(item[field] || 0), 0);
+    return sum + mileage + directAmount;
+  }, 0);
+
+  elements.expenseLineCountValue.textContent = `${items.length} ${items.length === 1 ? "line" : "lines"}`;
+  elements.expenseTotalValue.textContent = formatCurrency(totalAmount);
+  elements.expenseReimburseValue.textContent = formatCurrency(totalAmount - advances);
+
+  if (!elements.expenseMonthInput.value || items.length === 0) {
+    return null;
+  }
+
+  return {
+    claimMonth: elements.expenseMonthInput.value,
+    site: elements.expenseSiteInput.value.trim(),
+    supervisorName: elements.expenseSupervisorInput.value.trim(),
+    advances,
+    items
+  };
+}
+
+function renderOtInput(rowIndex, column) {
+  const label = otColumnLabels[column.key];
+  const commonAttributes = `
+    data-ot-row="${rowIndex}"
+    data-ot-field="${column.key}"
+    aria-label="${escapeHtml(label)}"
+  `;
+  let control = "";
+  if (column.type === "select") {
+    control = `
+      <select ${commonAttributes}>
+        ${Object.entries(otRateTypes).map(([value, rate]) => `
+          <option value="${value}" ${value === "normal" ? "selected" : ""}>${escapeHtml(rate.label)}</option>
+        `).join("")}
+      </select>
+    `;
+  } else if (column.type === "textarea") {
+    control = `
+      <textarea
+        ${commonAttributes}
+        class="expense-description-input"
+        rows="1"
+        ${column.placeholder ? `placeholder="${escapeHtml(column.placeholder)}"` : ""}
+      ></textarea>
+    `;
+  } else if (column.type === "readonly") {
+    control = `<input ${commonAttributes} type="text" readonly tabindex="-1">`;
+  } else {
+    control = `
+      <input
+        ${commonAttributes}
+        type="${column.type}"
+        ${column.key === "timeFrom" || column.key === "timeTo" ? `inputmode="numeric" maxlength="4" pattern="([01][0-9]|2[0-3])[0-5][0-9]"` : ""}
+        ${column.placeholder ? `placeholder="${escapeHtml(column.placeholder)}"` : ""}
+      >
+    `;
+  }
+
+  return `
+    <label class="expense-field expense-field-${column.key}">
+      <span>${label}</span>
+      ${control}
+    </label>
+  `;
+}
+
+function renderOtHeader() {
+  return `
+    <div class="expense-sheet-row ot-sheet-row expense-sheet-header" aria-hidden="true">
+      <div>#</div>
+      ${otColumns.map(column => `<div>${escapeHtml(otColumnLabels[column.key])}</div>`).join("")}
+    </div>
+  `;
+}
+
+function renderOtRow(rowIndex) {
+  return `
+    <section class="expense-sheet-row ot-sheet-row expense-line-card" data-ot-line="${rowIndex}" aria-label="Overtime row ${rowIndex + 1}">
+      <div class="expense-line-title">
+        <strong>${rowIndex + 1}</strong>
+      </div>
+      ${otColumns.map(column => renderOtInput(rowIndex, column)).join("")}
+    </section>
+  `;
+}
+
+function updateOtLineControls() {
+  const lineCount = elements.otLinesBody.querySelectorAll("[data-ot-line]").length;
+  elements.otAddLineButton.disabled = lineCount >= otMaxLineCount;
+  elements.otAddLineButton.textContent = lineCount >= otMaxLineCount ? "Max rows" : "+ Add row";
+  elements.otRemoveLineButton.disabled = lineCount <= otMinLineCount;
+}
+
+function renderOtRows() {
+  elements.otLinesBody.innerHTML = renderOtHeader() + Array.from(
+    { length: otInitialLineCount },
+    (_, rowIndex) => renderOtRow(rowIndex)
+  ).join("");
+  updateOtLineControls();
+  resizeExpenseDescriptions(elements.otLinesBody);
+}
+
+function addOtRow() {
+  const lineCount = elements.otLinesBody.querySelectorAll("[data-ot-line]").length;
+  if (lineCount >= otMaxLineCount) {
+    return;
+  }
+  elements.otLinesBody.insertAdjacentHTML("beforeend", renderOtRow(lineCount));
+  updateOtLineControls();
+  resizeExpenseDescriptions(elements.otLinesBody.querySelector(`[data-ot-line="${lineCount}"]`));
+  calculateOt();
+}
+
+function removeOtRow() {
+  const lineCount = elements.otLinesBody.querySelectorAll("[data-ot-line]").length;
+  if (lineCount <= otMinLineCount) {
+    return;
+  }
+
+  elements.otLinesBody.querySelector(`[data-ot-line="${lineCount - 1}"]`)?.remove();
+  updateOtLineControls();
+  calculateOt();
+}
+
+function isValidOtTime(value) {
+  return /^([01]\d|2[0-3])[0-5]\d$/.test(value);
+}
+
+function computeOtHours(timeFrom, timeTo) {
+  if (!isValidOtTime(timeFrom) || !isValidOtTime(timeTo) || timeFrom === timeTo) {
+    return null;
+  }
+  const startMinutes = Number(timeFrom.slice(0, 2)) * 60 + Number(timeFrom.slice(2));
+  const endMinutes = Number(timeTo.slice(0, 2)) * 60 + Number(timeTo.slice(2));
+  let minutes = endMinutes - startMinutes;
+  if (minutes <= 0) {
+    minutes += 24 * 60;
+  }
+  return Math.round((minutes / 60) * 100) / 100;
+}
+
+function collectOtItems() {
+  const items = [];
+  const lineCount = elements.otLinesBody.querySelectorAll("[data-ot-line]").length;
+  for (let rowIndex = 0; rowIndex < lineCount; rowIndex += 1) {
+    const inputs = [...elements.otLinesBody.querySelectorAll(`[data-ot-row="${rowIndex}"]`)];
+    const item = {};
+    inputs.forEach(input => {
+      item[input.dataset.otField] = input.value.trim();
+    });
+    if (!otRateTypes[item.rateType]) {
+      item.rateType = "normal";
+    }
+
+    if (!item.date && !item.timeFrom && !item.timeTo && !item.description) {
+      continue;
+    }
+    item.hours = computeOtHours(item.timeFrom, item.timeTo);
+    items.push(item);
+  }
+  return items;
+}
+
+function calculateOt() {
+  const items = collectOtItems();
+
+  const lineCount = elements.otLinesBody.querySelectorAll("[data-ot-line]").length;
+  for (let rowIndex = 0; rowIndex < lineCount; rowIndex += 1) {
+    const hoursInput = elements.otLinesBody.querySelector(`[data-ot-row="${rowIndex}"][data-ot-field="hours"]`);
+    const timeFrom = elements.otLinesBody.querySelector(`[data-ot-row="${rowIndex}"][data-ot-field="timeFrom"]`)?.value.trim() || "";
+    const timeTo = elements.otLinesBody.querySelector(`[data-ot-row="${rowIndex}"][data-ot-field="timeTo"]`)?.value.trim() || "";
+    if (hoursInput) {
+      const hours = computeOtHours(timeFrom, timeTo);
+      hoursInput.value = hours === null ? "" : String(hours);
+    }
+  }
+
+  const totalHours = items.reduce((sum, item) => sum + (item.hours || 0), 0);
+  const rateHours = { normal: 0, rest: 0, holiday: 0 };
+  items.forEach(item => {
+    rateHours[item.rateType] += item.hours || 0;
+  });
+
+  elements.otLineCountValue.textContent = `${items.length} ${items.length === 1 ? "line" : "lines"}`;
+  elements.otTotalHoursValue.textContent = `${Math.round(totalHours * 100) / 100} h`;
+  elements.otRateSplitValue.textContent = `${Math.round(rateHours.normal * 100) / 100} / ${Math.round(rateHours.rest * 100) / 100} / ${Math.round(rateHours.holiday * 100) / 100}`;
+
+  if (!elements.otMonthInput.value || items.length === 0) {
+    return null;
+  }
+
+  return {
+    claimMonth: elements.otMonthInput.value,
+    items
+  };
+}
+
+function collectKpiScores() {
+  const scores = {};
+  for (const section of kpiSections) {
+    scores[section.key] = section.items.map((_, index) => {
+      const input = elements.kpiSectionsContainer.querySelector(
+        `[data-kpi-score="${section.key}"][data-kpi-score-index="${index}"]:checked`
+      );
+      return Number(input?.value || 0);
+    });
+  }
+  return scores;
+}
+
+function collectKpiComments() {
+  const comments = {};
+  for (const section of kpiSections) {
+    const input = elements.kpiSectionsContainer.querySelector(`[data-kpi-comment="${section.key}"]`);
+    comments[section.key] = input.value.trim();
+  }
+  return comments;
+}
+
+function collectKpiOptions() {
+  const summaryOptions = {};
+  for (const field of kpiOptionFields) {
+    const input = elements.kpiOptionsContainer.querySelector(`[data-kpi-option="${field.key}"]`);
+    summaryOptions[field.key] = input.value;
+  }
+  return summaryOptions;
+}
+
+function calculateKpi() {
+  const kpiMonth = elements.kpiMonthInput.value;
+  if (!kpiMonth) {
+    return null;
+  }
+
+  const scores = collectKpiScores();
+  for (const section of kpiSections) {
+    if (scores[section.key].some(score => score < 1 || score > 5)) {
+      return null;
+    }
+  }
+
+  const summaryOptions = collectKpiOptions();
+  if (Object.values(summaryOptions).some(value => !value || value === "Pilih")) {
+    return null;
+  }
+
+  return {
+    kpiMonth,
+    scores,
+    comments: collectKpiComments(),
+    summaryOptions
+  };
+}
+
+async function login(workerId, password) {
+  setMessage(elements.loginMessage, "Logging in...");
+  const { token, worker } = await api("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ workerId, password })
+  });
+  state.token = token;
+  state.worker = worker;
+  localStorage.setItem("token", token);
+
+  if (!worker.profileComplete) {
+    showView("profileSetup");
+    return;
+  }
+
+  showView("workspace");
+  renderWorker();
+  await loadForms();
+  await loadOtherForms();
+  await loadSubmissions();
+}
+
+async function register(workerId, password) {
+  setMessage(elements.registerMessage, "Creating account...");
+  const { token, worker } = await api("/api/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ workerId, password })
+  });
+  state.token = token;
+  state.worker = worker;
+  localStorage.setItem("token", token);
+  showView("profileSetup");
+}
+
+function logout() {
+  clearAuth();
+  showView("login");
+  setMessage(elements.loginMessage, "");
+}
+
+async function enterWorkspace() {
+  showView("workspace");
+  renderWorker();
+  await loadForms();
+  await loadOtherForms();
+  await loadSubmissions();
+}
+
+function renderWorker(options = {}) {
+  const { resetDates = true } = options;
+  const worker = state.worker;
+  elements.workerName.textContent = worker.name || worker.workerId;
+  elements.workerIdBadge.textContent = worker.workerId;
+  elements.workerDesignation.textContent = worker.role === "admin"
+    ? `${worker.designation || "No designation"} | Admin`
+    : worker.designation || "No designation";
+  elements.profileName.textContent = worker.name || "-";
+  elements.profileDesignation.textContent = worker.designation || "-";
+  elements.profileHouseTel.textContent = worker.houseTel || "-";
+  elements.profileOtherPhone.textContent = worker.otherTel || "-";
+  elements.profileBalance.textContent = formatDays(worker.annualLeaveBalance);
+  renderWorkerFieldCopies();
+  renderProfileForm();
+
+  if (resetDates) {
+    const today = todayIso();
+    elements.startDateInput.value = today;
+    elements.endDateInput.value = today;
+    elements.mcStartDateInput.value = today;
+    elements.mcEndDateInput.value = today;
+    elements.kpiMonthInput.value = monthInputValue();
+    elements.expenseMonthInput.value = monthInputValue();
+    elements.otMonthInput.value = monthInputValue();
+  }
+  calculateAl();
+  calculateMc();
+  renderKpiForm();
+  renderExpenseForm();
+  renderOtForm();
+  renderFormAreas();
+}
+
+function renderWorkerFieldCopies() {
+  const worker = state.worker;
+  const values = {
+    name: worker.name || "-",
+    designation: worker.designation || "-",
+    department: worker.department || "-",
+    houseTel: worker.houseTel || "-",
+    otherTel: worker.otherTel || "-",
+    workerId: worker.workerId || "-",
+    evaluatorName: worker.evaluatorName || "-"
+  };
+
+  document.querySelectorAll("[data-worker-field]").forEach(element => {
+    element.textContent = values[element.dataset.workerField] || "-";
+  });
+}
+
+function renderProfileForm() {
+  const worker = state.worker;
+  elements.profileWorkerIdInput.value = worker.workerId || "";
+  elements.profileNameInput.value = worker.name || "";
+  elements.profileDesignationInput.value = worker.designation || "";
+  elements.profileDepartmentInput.value = worker.department || "";
+  elements.profileHouseTelInput.value = worker.houseTel || "";
+  elements.profileOtherTelInput.value = worker.otherTel || "";
+  elements.profileEvaluatorNameInput.value = worker.evaluatorName || "";
+  elements.profileEntitlementInput.value = worker.annualLeaveEntitlement ?? 0;
+  elements.profileEmploymentTypeInput.value = worker.employmentType || "permanent";
+  elements.profileEmploymentStartDateInput.value = worker.employmentStartDate || "";
+  elements.profileEmploymentEndDateInput.value = worker.employmentEndDate || "";
+  updateEmploymentDateFields();
+  elements.profilePeriodReadout.textContent = `${formatDate(worker.employmentStartDate)} to ${formatDate(worker.employmentEndDate)}`;
+  elements.profileTakenReadout.textContent = formatDays(worker.annualLeaveTaken);
+  elements.profileBalanceReadout.textContent = formatDays(worker.annualLeaveBalance);
+  renderKpiTracker();
+}
+
+function renderKpiForm() {
+  if (!state.worker) {
+    return;
+  }
+  if (!elements.kpiMonthInput.value) {
+    elements.kpiMonthInput.value = monthInputValue();
+  }
+  elements.kpiEvaluatorInput.value = state.worker.evaluatorName || "";
+  renderKpiWizard();
+}
+
+function renderExpenseForm() {
+  if (!state.worker) {
+    return;
+  }
+  if (!elements.expenseMonthInput.value) {
+    elements.expenseMonthInput.value = monthInputValue();
+  }
+  if (!elements.expenseSupervisorInput.value) {
+    elements.expenseSupervisorInput.value = state.worker.evaluatorName || "";
+  }
+  calculateExpenses();
+}
+
+function renderOtForm() {
+  if (!state.worker) {
+    return;
+  }
+  if (!elements.otMonthInput.value) {
+    elements.otMonthInput.value = monthInputValue();
+  }
+  calculateOt();
+}
+
+function renderKpiTracker() {
+  const year = new Date().getFullYear();
+  elements.kpiTrackerTitle.textContent = `Monthly KPI Status ${year}`;
+
+  const monthlyEntries = new Map(
+    state.submissions
+      .filter(item => item.formType === "KPI" && Number(item.kpiYear) === year)
+      .map(item => [item.kpiMonth, item])
+  );
+
+  elements.kpiTrackerGrid.innerHTML = Array.from({ length: 12 }, (_, index) => {
+    const month = String(index + 1).padStart(2, "0");
+    const monthKey = `${year}-${month}`;
+    const item = monthlyEntries.get(monthKey);
+    const label = new Date(year, index, 1).toLocaleDateString(undefined, { month: "short" });
+    return `
+      <div class="kpi-tracker-card ${item ? "complete" : "pending"}">
+        <strong>${label}</strong>
+        <span>${item ? "Submitted" : "Pending"}</span>
+        ${item ? `<a href="${item.pdfUrl}" target="_blank" rel="noreferrer">Open PDF</a>` : "<span>Not submitted</span>"}
+      </div>
+    `;
+  }).join("");
+}
+
+function getCurrentYearBounds() {
+  const year = new Date().getFullYear();
+  return {
+    start: `${year}-01-01`,
+    end: `${year}-12-31`
+  };
+}
+
+function updateSetupEmploymentDateFields() {
+  const isPermanent = elements.setupEmploymentTypeInput.value === "permanent";
+
+  if (isPermanent) {
+    const bounds = getCurrentYearBounds();
+    elements.setupEmploymentStartDateInput.value = bounds.start;
+    elements.setupEmploymentEndDateInput.value = bounds.end;
+  }
+
+  elements.setupEmploymentStartDateInput.disabled = isPermanent;
+  elements.setupEmploymentEndDateInput.disabled = isPermanent;
+}
+
+function updateEmploymentDateFields() {
+  const isPermanent = elements.profileEmploymentTypeInput.value === "permanent";
+
+  if (isPermanent) {
+    const bounds = getCurrentYearBounds();
+    elements.profileEmploymentStartDateInput.value = bounds.start;
+    elements.profileEmploymentEndDateInput.value = bounds.end;
+  }
+
+  elements.profileEmploymentStartDateInput.readOnly = isPermanent;
+  elements.profileEmploymentEndDateInput.readOnly = isPermanent;
+}
+
+async function loadForms() {
+  const { forms } = await api("/api/forms");
+  if (!forms.some(form => form.id === state.selectedForm && form.status === "ready")) {
+    const firstReady = forms.find(form => form.status === "ready");
+    state.selectedForm = firstReady ? firstReady.id : "AL";
+  }
+  elements.formCards.innerHTML = forms
+    .map(form => {
+      const ready = form.status === "ready";
+      return `
+        <button
+          class="form-card ${ready ? "ready" : "disabled"} ${state.selectedForm === form.id ? "active" : ""}"
+          type="button"
+          data-form-id="${form.id}"
+          ${ready ? "" : "disabled"}
+        >
+          <strong>${form.name}</strong>
+          <span>${form.id}</span>
+        </button>
+      `;
+    })
+    .join("");
+  renderFormAreas();
+}
+
+async function loadOtherForms() {
+  const { forms } = await api("/api/others");
+  state.otherForms = forms || [];
+  renderOtherForms();
+}
+
+function selectForm(formId) {
+  state.selectedForm = formId;
+  renderFormAreas();
+}
+
+async function loadSubmissions() {
+  if (!state.worker) {
+    return;
+  }
+
+  const [{ submissions }, { entries }] = await Promise.all([
+    api("/api/submissions"),
+    api("/api/calendar")
+  ]);
+  state.submissions = submissions;
+  state.calendarEntries = entries;
+  renderKpiTracker();
+  renderHistory();
+  renderCalendar();
+}
+
+function renderHistory() {
+  if (state.submissions.length === 0) {
+    elements.historyRows.innerHTML = `
+      <tr>
+        <td colspan="7">No generated PDFs yet.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  elements.historyRows.innerHTML = state.submissions
+    .map(item => `
+      <tr>
+        <td>${item.formType}</td>
+        <td>${getLeaveDisplay(item)}</td>
+        <td>${getSubmissionPeriodLabel(item)}</td>
+        <td>${item.durationDays}</td>
+        <td>${new Date(item.createdAt).toLocaleString()}</td>
+        <td><a href="${item.pdfUrl}" target="_blank" rel="noreferrer">Download</a></td>
+        <td>
+          <button class="danger-button" type="button" data-delete-submission="${item.id}">
+            Delete
+          </button>
+        </td>
+      </tr>
+    `)
+    .join("");
+}
+
+function renderCalendar() {
+  const monthDate = state.calendarDate;
+  const year = monthDate.getFullYear();
+  const month = monthDate.getMonth();
+
+  elements.calendarTitle.textContent = monthDate.toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric"
+  });
+
+  const firstOfMonth = new Date(year, month, 1);
+  const start = new Date(year, month, 1 - firstOfMonth.getDay());
+  const days = [];
+
+  for (let index = 0; index < 42; index += 1) {
+    days.push(new Date(start.getFullYear(), start.getMonth(), start.getDate() + index));
+  }
+
+  elements.calendarGrid.innerHTML = days
+    .map(day => {
+      const dayIso = toIsoDate(day);
+      const outside = day.getMonth() !== month;
+      const isToday = dayIso === todayIso();
+      const holiday = companyHolidayByDate.get(dayIso);
+      const dayClasses = [
+        "calendar-day",
+        outside ? "outside" : "",
+        holiday ? "holiday" : "",
+        isToday ? "today" : ""
+      ].filter(Boolean).join(" ");
+      const entries = state.calendarEntries.filter(item => {
+        const entryStart = parseIsoDate(item.calendarStart || item.startDate);
+        const entryEnd = parseIsoDate(item.calendarEnd || item.endDate);
+        return day >= entryStart && day <= entryEnd;
+      });
+
+      return `
+        <div class="${dayClasses}"${isToday ? ' aria-current="date"' : ""}>
+          <div class="calendar-date-row">
+            <div class="calendar-date-group">
+              <div class="calendar-date">${day.getDate()}</div>
+            </div>
+            ${holiday ? `
+              <span class="calendar-holiday-marker" tabindex="0" aria-label="Holiday: ${escapeHtml(holiday.name)}">
+                Cuti
+                <span class="calendar-holiday-tooltip" role="tooltip">
+                  ${escapeHtml(holiday.name)}
+                </span>
+              </span>
+            ` : ""}
+          </div>
+          ${entries
+            .map(item => {
+              const type = getCalendarType(item);
+              const displayName = getCalendarDisplayName(item.workerName, item.workerId);
+              const title = `${item.workerName || item.workerId} - ${calendarTypeLabels[type]}`;
+              return `
+                <span class="calendar-entry ${type.toLowerCase()}" title="${escapeHtml(title)}">
+                  ${escapeHtml(displayName)}
+                </span>
+              `;
+            })
+            .join("")}
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function renderUpcomingHolidays() {
+  if (!elements.holidayList) {
+    return;
+  }
+
+  const today = todayIso();
+  const upcomingHolidays = companyHolidays.filter(holiday => holiday.date >= today);
+
+  if (upcomingHolidays.length === 0) {
+    elements.holidayList.innerHTML = `
+      <li class="holiday-empty">
+        <span>No more holidays listed for this year.</span>
+      </li>
+    `;
+    return;
+  }
+
+  elements.holidayList.innerHTML = upcomingHolidays
+    .map(holiday => `
+      <li>
+        <time datetime="${holiday.date}">${formatShortDate(holiday.date)}</time>
+        <span>${escapeHtml(holiday.name)}</span>
+      </li>
+    `)
+    .join("");
+}
+
+function setActiveTab(panelId) {
+  elements.tabs.forEach(tab => {
+    tab.classList.toggle("active", tab.dataset.tab === panelId);
+  });
+  elements.panels.forEach(panel => {
+    panel.classList.toggle("active-panel", panel.id === panelId);
+  });
+}
+
+elements.loginForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const workerId = elements.workerIdInput.value.trim();
+  const password = elements.loginPasswordInput.value;
+  if (!workerId) {
+    setMessage(elements.loginMessage, "Worker ID is required.", "error");
+    return;
+  }
+  if (!password) {
+    setMessage(elements.loginMessage, "Password is required.", "error");
+    return;
+  }
+  try {
+    await login(workerId, password);
+  } catch (error) {
+    setMessage(elements.loginMessage, error.message, "error");
+  }
+});
+
+elements.showRegisterButton.addEventListener("click", () => {
+  setMessage(elements.loginMessage, "");
+  showView("register");
+});
+
+elements.showLoginButton.addEventListener("click", () => {
+  setMessage(elements.registerMessage, "");
+  showView("login");
+});
+
+elements.registerForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const workerId = elements.registerWorkerIdInput.value.trim();
+  const password = elements.registerPasswordInput.value;
+  if (!workerId) {
+    setMessage(elements.registerMessage, "Worker ID is required.", "error");
+    return;
+  }
+  if (!password) {
+    setMessage(elements.registerMessage, "Password is required.", "error");
+    return;
+  }
+  try {
+    await register(workerId, password);
+  } catch (error) {
+    setMessage(elements.registerMessage, error.message, "error");
+  }
+});
+
+elements.profileSetupForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!state.worker) return;
+
+  elements.saveProfileSetupButton.disabled = true;
+  setMessage(elements.profileSetupMessage, "Saving profile...");
+
+  try {
+    standardizeFieldGroup(profileSetupStandardFields);
+    const payload = {
+      name: elements.setupNameInput.value,
+      designation: elements.setupDesignationInput.value,
+      department: elements.setupDepartmentInput.value,
+      houseTel: elements.setupHouseTelInput.value,
+      otherTel: elements.setupOtherTelInput.value,
+      evaluatorName: elements.setupEvaluatorNameInput.value,
+      annualLeaveEntitlement: elements.setupEntitlementInput.value,
+      employmentType: elements.setupEmploymentTypeInput.value,
+      employmentStartDate: elements.setupEmploymentStartDateInput.value,
+      employmentEndDate: elements.setupEmploymentEndDateInput.value
+    };
+    const { worker } = await api(`/api/workers/${encodeURIComponent(state.worker.workerId)}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    });
+    state.worker = worker;
+    await enterWorkspace();
+  } catch (error) {
+    setMessage(elements.profileSetupMessage, error.message, "error");
+  } finally {
+    elements.saveProfileSetupButton.disabled = false;
+  }
+});
+
+elements.setupEmploymentTypeInput.addEventListener("change", updateSetupEmploymentDateFields);
+
+elements.logoutButton.addEventListener("click", logout);
+
+elements.themeToggles.forEach(button => {
+  button.addEventListener("click", toggleTheme);
+});
+
+elements.tabs.forEach(tab => {
+  tab.addEventListener("click", () => setActiveTab(tab.dataset.tab));
+});
+
+elements.startDateInput.addEventListener("change", () => {
+  if (!elements.endDateInput.value || elements.endDateInput.value < elements.startDateInput.value) {
+    elements.endDateInput.value = elements.startDateInput.value;
+  }
+  calculateAl();
+});
+
+elements.endDateInput.addEventListener("change", calculateAl);
+
+elements.leaveTypeInputs.forEach(input => {
+  input.addEventListener("change", calculateAl);
+});
+
+elements.formCards.addEventListener("click", event => {
+  const button = event.target.closest("[data-form-id]");
+  if (!button || button.disabled) {
+    return;
+  }
+  selectForm(button.dataset.formId);
+});
+
+elements.otherFormCards.addEventListener("click", event => {
+  const button = event.target.closest("[data-other-form-id]");
+  if (!button) {
+    return;
+  }
+  selectOtherForm(button.dataset.otherFormId);
+});
+
+elements.otherUploadForm.addEventListener("submit", async event => {
+  event.preventDefault();
+
+  if (state.worker?.role !== "admin") {
+    setMessage(elements.otherAdminMessage, "Admin access required.", "error");
+    return;
+  }
+
+  const file = elements.otherUploadInput.files[0];
+  if (!file) {
+    setMessage(elements.otherAdminMessage, "Choose a PDF file.", "error");
+    return;
+  }
+
+  elements.otherUploadButton.disabled = true;
+  setMessage(elements.otherAdminMessage, "Uploading PDF...");
+
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    const { forms } = await api("/api/admin/others", {
+      method: "POST",
+      body: formData
+    });
+    state.otherForms = forms || [];
+    elements.otherUploadForm.reset();
+    renderOtherForms();
+    setMessage(elements.otherAdminMessage, "PDF uploaded.", "success");
+  } catch (error) {
+    setMessage(elements.otherAdminMessage, error.message, "error");
+  } finally {
+    elements.otherUploadButton.disabled = false;
+  }
+});
+
+elements.otherAdminRows.addEventListener("click", async event => {
+  const button = event.target.closest("[data-delete-other-form]");
+  if (!button || state.worker?.role !== "admin") {
+    return;
+  }
+
+  const fileName = button.dataset.deleteOtherForm;
+  const confirmed = window.confirm(`Remove ${fileName}?`);
+  if (!confirmed) {
+    return;
+  }
+
+  button.disabled = true;
+  setMessage(elements.otherAdminMessage, "Removing PDF...");
+
+  try {
+    const { forms } = await api(`/api/admin/others/${encodeURIComponent(fileName)}`, {
+      method: "DELETE"
+    });
+    state.otherForms = forms || [];
+    renderOtherForms();
+    setMessage(elements.otherAdminMessage, "PDF removed.", "success");
+  } catch (error) {
+    setMessage(elements.otherAdminMessage, error.message, "error");
+    button.disabled = false;
+  }
+});
+
+elements.alForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const calculation = calculateAl();
+  const reason = elements.leaveReasonInput.value.trim();
+
+  if (!calculation) {
+    setMessage(elements.formMessage, "Choose a valid AL date range.", "error");
+    return;
+  }
+
+  if (!calculation.leaveType) {
+    setMessage(elements.formMessage, "Select one leave type.", "error");
+    return;
+  }
+
+  if (!reason) {
+    setMessage(elements.formMessage, "Reason is required.", "error");
+    return;
+  }
+
+  elements.generateButton.disabled = true;
+  setMessage(elements.formMessage, "Generating PDF...");
+
+  try {
+    const payload = {
+      workerId: state.worker.workerId,
+      startDate: calculation.startDate,
+      endDate: calculation.endDate,
+      leaveType: calculation.leaveType,
+      reason
+    };
+    const { submission } = await api("/api/submissions/al", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    setMessage(
+      elements.formMessage,
+      `PDF generated: ${submission.pdfFileName}`,
+      "success"
+    );
+    await refreshWorkerProfile({ resetDates: false });
+    await loadSubmissions();
+    window.open(submission.pdfUrl, "_blank", "noreferrer");
+  } catch (error) {
+    setMessage(elements.formMessage, error.message, "error");
+  } finally {
+    elements.generateButton.disabled = false;
+  }
+});
+
+elements.mcStartDateInput.addEventListener("change", () => {
+  if (!elements.mcEndDateInput.value || elements.mcEndDateInput.value < elements.mcStartDateInput.value) {
+    elements.mcEndDateInput.value = elements.mcStartDateInput.value;
+  }
+  calculateMc();
+});
+
+elements.mcEndDateInput.addEventListener("change", calculateMc);
+
+elements.mcForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const calculation = calculateMc();
+  const sicknessReason = elements.mcReasonInput.value.trim();
+
+  if (!calculation) {
+    setMessage(elements.mcFormMessage, "Choose a valid MC date range.", "error");
+    return;
+  }
+
+  if (!sicknessReason) {
+    setMessage(elements.mcFormMessage, "Sickness/reason is required.", "error");
+    return;
+  }
+
+  elements.mcGenerateButton.disabled = true;
+  setMessage(elements.mcFormMessage, "Generating PDF...");
+
+  try {
+    const payload = {
+      workerId: state.worker.workerId,
+      startDate: calculation.startDate,
+      endDate: calculation.endDate,
+      sicknessReason
+    };
+    const { submission } = await api("/api/submissions/mc", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    setMessage(
+      elements.mcFormMessage,
+      `PDF generated: ${submission.pdfFileName}`,
+      "success"
+    );
+    await loadSubmissions();
+    window.open(submission.pdfUrl, "_blank", "noreferrer");
+  } catch (error) {
+    setMessage(elements.mcFormMessage, error.message, "error");
+  } finally {
+    elements.mcGenerateButton.disabled = false;
+  }
+});
+
+elements.kpiPrevButton.addEventListener("click", () => {
+  state.kpiStep = Math.max(state.kpiStep - 1, 0);
+  renderKpiWizard();
+});
+
+elements.kpiStepProgress.addEventListener("click", event => {
+  const marker = event.target.closest("[data-kpi-step-index]");
+  if (!marker) {
+    return;
+  }
+
+  state.kpiStep = Number(marker.dataset.kpiStepIndex);
+  renderKpiWizard();
+});
+
+elements.kpiNextButton.addEventListener("click", () => {
+  state.kpiStep = Math.min(state.kpiStep + 1, kpiStepOrder.length - 1);
+  renderKpiWizard();
+});
+
+elements.kpiForm.addEventListener("input", () => {
+  if (state.kpiValidationAttempted) {
+    renderKpiStepProgress();
+  }
+});
+
+elements.kpiForm.addEventListener("change", () => {
+  if (state.kpiValidationAttempted) {
+    renderKpiStepProgress();
+  }
+});
+
+elements.kpiForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const calculation = calculateKpi();
+  const evaluatorName = elements.kpiEvaluatorInput.value.trim();
+  const taskList = elements.kpiTaskListInput.value.trim();
+  const incompleteSteps = getIncompleteKpiStepIndexes();
+  const firstIncompleteStep = incompleteSteps[0] ?? -1;
+
+  if (firstIncompleteStep !== -1 || !calculation) {
+    state.kpiValidationAttempted = true;
+    state.kpiStep = firstIncompleteStep === -1 ? state.kpiStep : firstIncompleteStep;
+    renderKpiWizard();
+    const incompleteStepText = incompleteSteps.length
+      ? ` Review red step ${incompleteSteps.length === 1 ? "number" : "numbers"} ${formatKpiStepNumbers(incompleteSteps)}.`
+      : "";
+    setMessage(
+      elements.kpiFormMessage,
+      `Complete the evaluator, task list, KPI month, all 1-5 scores, and all summary selections.${incompleteStepText}`,
+      "error"
+    );
+    return;
+  }
+
+  elements.kpiGenerateButton.disabled = true;
+  setMessage(elements.kpiFormMessage, "Generating PDF...");
+
+  try {
+    const payload = {
+      workerId: state.worker.workerId,
+      kpiMonth: calculation.kpiMonth,
+      evaluatorName,
+      taskList,
+      scores: calculation.scores,
+      comments: calculation.comments,
+      summaryOptions: calculation.summaryOptions,
+      workerFeedback: elements.kpiWorkerFeedbackInput.value.trim(),
+      trainingNeeds: elements.kpiTrainingNeedsInput.value.trim(),
+      evaluatorFeedback: elements.kpiEvaluatorFeedbackInput.value.trim()
+    };
+    const { submission } = await api("/api/submissions/kpi", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    setMessage(
+      elements.kpiFormMessage,
+      `PDF generated: ${submission.pdfFileName}`,
+      "success"
+    );
+    state.kpiValidationAttempted = false;
+    renderKpiWizard();
+    await loadSubmissions();
+    window.open(submission.pdfUrl, "_blank", "noreferrer");
+  } catch (error) {
+    setMessage(elements.kpiFormMessage, error.message, "error");
+  } finally {
+    elements.kpiGenerateButton.disabled = false;
+  }
+});
+
+elements.expenseForm.addEventListener("input", event => {
+  if (event.target.classList.contains("expense-description-input")) {
+    resizeExpenseDescription(event.target);
+  }
+  calculateExpenses();
+});
+elements.expenseForm.addEventListener("change", calculateExpenses);
+elements.expenseAddLineButton.addEventListener("click", addExpenseRow);
+elements.expenseRemoveLineButton.addEventListener("click", removeExpenseRow);
+
+elements.expenseForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const calculation = calculateExpenses();
+
+  if (!calculation) {
+    setMessage(elements.expenseFormMessage, "Choose a claim month and add at least one expense line.", "error");
+    return;
+  }
+
+  if (!calculation.supervisorName) {
+    setMessage(elements.expenseFormMessage, "Supervisor name is required.", "error");
+    return;
+  }
+
+  const invalidLine = calculation.items.find(item => !item.date || !item.description);
+  if (invalidLine) {
+    setMessage(elements.expenseFormMessage, "Every expense line needs a date and description.", "error");
+    return;
+  }
+
+  const outsideMonth = calculation.items.find(item => !item.date.startsWith(calculation.claimMonth));
+  if (outsideMonth) {
+    setMessage(elements.expenseFormMessage, "Expense dates must match the claim month.", "error");
+    return;
+  }
+
+  elements.expenseGenerateButton.disabled = true;
+  setMessage(elements.expenseFormMessage, "Generating PDF...");
+
+  try {
+    const { submission } = await api("/api/submissions/expenses", {
+      method: "POST",
+      body: JSON.stringify(calculation)
+    });
+    setMessage(
+      elements.expenseFormMessage,
+      `PDF generated: ${submission.pdfFileName}`,
+      "success"
+    );
+    await loadSubmissions();
+    window.open(submission.pdfUrl, "_blank", "noreferrer");
+  } catch (error) {
+    setMessage(elements.expenseFormMessage, error.message, "error");
+  } finally {
+    elements.expenseGenerateButton.disabled = false;
+  }
+});
+
+elements.otForm.addEventListener("input", event => {
+  if (event.target.classList.contains("expense-description-input")) {
+    resizeExpenseDescription(event.target);
+  }
+  calculateOt();
+});
+elements.otForm.addEventListener("change", calculateOt);
+elements.otAddLineButton.addEventListener("click", addOtRow);
+elements.otRemoveLineButton.addEventListener("click", removeOtRow);
+
+elements.otForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const calculation = calculateOt();
+
+  if (!calculation) {
+    setMessage(elements.otFormMessage, "Choose a claim month and add at least one overtime line.", "error");
+    return;
+  }
+
+  const invalidLine = calculation.items.find(item => !item.date || !item.description);
+  if (invalidLine) {
+    setMessage(elements.otFormMessage, "Every overtime line needs a date and description.", "error");
+    return;
+  }
+
+  const invalidTime = calculation.items.find(item => item.hours === null);
+  if (invalidTime) {
+    setMessage(elements.otFormMessage, "Times must use 24-hour HHMM format (e.g. 1800 to 2200).", "error");
+    return;
+  }
+
+  const outsideMonth = calculation.items.find(item => !item.date.startsWith(calculation.claimMonth));
+  if (outsideMonth) {
+    setMessage(elements.otFormMessage, "Overtime dates must match the claim month.", "error");
+    return;
+  }
+
+  elements.otGenerateButton.disabled = true;
+  setMessage(elements.otFormMessage, "Generating PDF...");
+
+  try {
+    const { submission } = await api("/api/submissions/ot", {
+      method: "POST",
+      body: JSON.stringify(calculation)
+    });
+    setMessage(
+      elements.otFormMessage,
+      `PDF generated: ${submission.pdfFileName}`,
+      "success"
+    );
+    await loadSubmissions();
+    window.open(submission.pdfUrl, "_blank", "noreferrer");
+  } catch (error) {
+    setMessage(elements.otFormMessage, error.message, "error");
+  } finally {
+    elements.otGenerateButton.disabled = false;
+  }
+});
+
+elements.profileForm.addEventListener("submit", async event => {
+  event.preventDefault();
+
+  if (!state.worker) {
+    return;
+  }
+
+  elements.saveProfileButton.disabled = true;
+  setMessage(elements.profileMessage, "Saving profile...");
+
+  try {
+    standardizeFieldGroup(profileEditStandardFields);
+    const payload = {
+      name: elements.profileNameInput.value,
+      designation: elements.profileDesignationInput.value,
+      department: elements.profileDepartmentInput.value,
+      houseTel: elements.profileHouseTelInput.value,
+      otherTel: elements.profileOtherTelInput.value,
+      evaluatorName: elements.profileEvaluatorNameInput.value,
+      annualLeaveEntitlement: elements.profileEntitlementInput.value,
+      employmentType: elements.profileEmploymentTypeInput.value,
+      employmentStartDate: elements.profileEmploymentStartDateInput.value,
+      employmentEndDate: elements.profileEmploymentEndDateInput.value
+    };
+    const { worker } = await api(`/api/workers/${encodeURIComponent(state.worker.workerId)}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    });
+
+    state.worker = worker;
+    renderWorker({ resetDates: false });
+    setMessage(elements.profileMessage, "Profile saved.", "success");
+  } catch (error) {
+    setMessage(elements.profileMessage, error.message, "error");
+  } finally {
+    elements.saveProfileButton.disabled = false;
+  }
+});
+
+elements.profileEmploymentTypeInput.addEventListener("change", updateEmploymentDateFields);
+
+elements.historyRows.addEventListener("click", async event => {
+  const button = event.target.closest("[data-delete-submission]");
+  if (!button || !state.worker) {
+    return;
+  }
+
+  const submissionId = button.dataset.deleteSubmission;
+  const confirmed = window.confirm("Delete this request and remove its generated files?");
+  if (!confirmed) {
+    return;
+  }
+
+  button.disabled = true;
+  setMessage(elements.historyMessage, "Deleting request...");
+
+  try {
+    await api(`/api/submissions/${encodeURIComponent(submissionId)}`, {
+      method: "DELETE"
+    });
+    await refreshWorkerProfile({ resetDates: false });
+    await loadSubmissions();
+    setMessage(elements.historyMessage, "Request deleted and generated files removed.", "success");
+  } catch (error) {
+    setMessage(elements.historyMessage, error.message, "error");
+    button.disabled = false;
+  }
+});
+
+elements.previousMonthButton.addEventListener("click", () => {
+  state.calendarDate = new Date(
+    state.calendarDate.getFullYear(),
+    state.calendarDate.getMonth() - 1,
+    1
+  );
+  renderCalendar();
+});
+
+elements.nextMonthButton.addEventListener("click", () => {
+  state.calendarDate = new Date(
+    state.calendarDate.getFullYear(),
+    state.calendarDate.getMonth() + 1,
+    1
+  );
+  renderCalendar();
+});
+
+elements.todayButton.addEventListener("click", () => {
+  state.calendarDate = new Date();
+  renderCalendar();
+});
+
+applyTheme(state.theme, { persist: false });
+renderKpiStaticInstructions();
+renderKpiSections();
+renderKpiOptions();
+renderExpenseRows();
+renderOtRows();
+renderOtherForms();
+renderUpcomingHolidays();

@@ -1,0 +1,58 @@
+services:
+  web:
+    build: .
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - TZ=Asia/Kuala_Lumpur
+      - ENVIRONMENT=development
+      - APP_HOST=0.0.0.0
+      - APP_PORT=3000
+      # Choose exactly one complete database target block.
+      # Option A: local MySQL service on the Windows host (active)
+      - DB_SERVER=host.docker.internal
+      - DB_PORT=3306
+      - DB_SCHEMA=officeform
+      - DB_USER=root
+      - DB_PASSWORD=root
+
+      # Option B: MySQL container in this Compose stack
+#      - DB_SERVER=db
+#      - DB_PORT=3306
+#      - DB_SCHEMA=officeform
+#      - DB_USER=officeform
+#      - DB_PASSWORD=officeform_pass
+
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-secret-change-in-production}
+      - AUTH_SHARED_PASSWORD=${AUTH_SHARED_PASSWORD:-abcd1234}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./generated:/app/generated
+      - ./formOri:/app/formOri:ro
+      - ./others:/app/others
+
+  db:
+    image: mysql:8.4
+    profiles:
+      - docker-db
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-root}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-officeform}
+      - MYSQL_USER=${MYSQL_USER:-officeform}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-officeform_pass}
+      - TZ=Asia/Kuala_Lumpur
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_container_data:/var/lib/mysql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+volumes:
+  mysql_container_data:

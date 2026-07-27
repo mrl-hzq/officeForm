@@ -1,0 +1,9 @@
+node_modules/
+generated/
+__pycache__/
+*.pyc
+*.log
+.env
+.venv/
+
+officeform-web.tar

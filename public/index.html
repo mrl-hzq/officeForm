@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Office Forms</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="app">
+      <!-- Login -->
+      <section id="loginView" class="login-view">
+        <div class="login-panel">
+          <div class="panel-kicker">
+            <p class="eyebrow">Office Forms</p>
+            <button class="theme-toggle" type="button" data-theme-toggle aria-pressed="true">Light mode</button>
+          </div>
+          <h1>Worker Login</h1>
+          <form id="loginForm" class="login-form">
+            <label for="workerIdInput">Worker ID</label>
+            <input id="workerIdInput" name="workerId" autocomplete="username" required placeholder="e.g. C0036">
+            <label for="loginPasswordInput">Password</label>
+            <div class="login-row">
+              <input id="loginPasswordInput" name="password" type="password" autocomplete="current-password" required>
+              <button type="submit">Login</button>
+            </div>
+            <p id="loginMessage" class="message" role="status"></p>
+          </form>
+          <p class="login-switch">No account? <button id="showRegisterButton" class="link-button" type="button">Register</button></p>
+        </div>
+      </section>
+
+      <!-- Register -->
+      <section id="registerView" class="login-view hidden">
+        <div class="login-panel">
+          <div class="panel-kicker">
+            <p class="eyebrow">Office Forms</p>
+            <button class="theme-toggle" type="button" data-theme-toggle aria-pressed="true">Light mode</button>
+          </div>
+          <h1>Create Account</h1>
+          <form id="registerForm" class="login-form">
+            <label for="registerWorkerIdInput">Worker ID</label>
+            <input id="registerWorkerIdInput" name="workerId" autocomplete="username" required placeholder="e.g. C0036">
+            <label for="registerPasswordInput">Password</label>
+            <div class="login-row">
+              <input id="registerPasswordInput" name="password" type="password" autocomplete="current-password" required>
+              <button type="submit">Register</button>
+            </div>
+            <p id="registerMessage" class="message" role="status"></p>
+          </form>
+          <p class="login-switch">Already registered? <button id="showLoginButton" class="link-button" type="button">Login</button></p>
+        </div>
+      </section>
+
+      <!-- Profile completion (shown after first register) -->
+      <section id="profileSetupView" class="login-view hidden">
+        <div class="login-panel profile-setup-panel">
+          <div class="panel-kicker">
+            <p class="eyebrow">Office Forms</p>
+            <button class="theme-toggle" type="button" data-theme-toggle aria-pressed="true">Light mode</button>
+          </div>
+          <h1>Complete Your Profile</h1>
+          <p class="setup-note">Fill in your details to continue. These will be used to autofill forms.</p>
+          <form id="profileSetupForm" class="profile-form">
+            <div class="profile-form-grid">
+              <label>
+                Name <span class="required">*</span>
+                <input id="setupNameInput" name="name" type="text" required>
+              </label>
+              <label>
+                Designation
+                <input id="setupDesignationInput" name="designation" type="text">
+              </label>
+              <label>
+                Department
+                <input id="setupDepartmentInput" name="department" type="text">
+              </label>
+              <label>
+                House phone
+                <input id="setupHouseTelInput" name="houseTel" type="text">
+              </label>
+              <label>
+                Other phone
+                <input id="setupOtherTelInput" name="otherTel" type="text">
+              </label>
+              <label>
+                KPI evaluator name
+                <input id="setupEvaluatorNameInput" name="evaluatorName" type="text">
+              </label>
+              <label>
+                AL entitlement (days)
+                <input id="setupEntitlementInput" name="annualLeaveEntitlement" type="number" min="0" step="0.5" value="0">
+              </label>
+              <label>
+                Employment type
+                <select id="setupEmploymentTypeInput" name="employmentType">
+                  <option value="permanent">Permanent</option>
+                  <option value="contract">Contract</option>
+                </select>
+              </label>
+              <label>
+                Employment start date
+                <input id="setupEmploymentStartDateInput" name="employmentStartDate" type="date">
+              </label>
+              <label>
+                Employment end date
+                <input id="setupEmploymentEndDateInput" name="employmentEndDate" type="date">
+              </label>
+            </div>
+            <button id="saveProfileSetupButton" type="submit">Save &amp; Continue</button>
+            <p id="profileSetupMessage" class="message" role="status"></p>
+          </form>
+        </div>
+      </section>
+
+      <section id="workspaceView" class="workspace hidden">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Office Forms</p>
+            <h1 id="workerName">Worker</h1>
+          </div>
+          <div class="worker-meta">
+            <span id="workerIdBadge"></span>
+            <span id="workerDesignation"></span>
+            <button class="theme-toggle" type="button" data-theme-toggle aria-pressed="true">Light mode</button>
+            <button id="logoutButton" class="ghost-button" type="button">Logout</button>
+          </div>
+        </header>
+
+        <nav class="tabs" aria-label="Workspace">
+          <button class="tab active" data-tab="formsPanel" type="button">Forms</button>
+          <button class="tab" data-tab="profilePanel" type="button">Profile</button>
+          <button class="tab" data-tab="kpiPanel" type="button">KPI</button>
+          <button class="tab" data-tab="calendarPanel" type="button">Calendar</button>
+          <button class="tab" data-tab="historyPanel" type="button">History</button>
+          <button class="tab" data-tab="othersPanel" type="button">Others</button>
+        </nav>
+
+        <section id="formsPanel" class="panel active-panel">
+          <div class="layout">
+            <aside class="form-list">
+              <h2>Forms</h2>
+              <div id="formCards" class="form-cards"></div>
+            </aside>
+
+            <section id="leaveFormArea" class="form-area" data-form-area="AL">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Leave</p>
+                  <h2>AL and EL</h2>
+                </div>
+              </div>
+
+              <div class="profile-grid">
+                <div>
+                  <span>Name</span>
+                  <strong id="profileName"></strong>
+                </div>
+                <div>
+                  <span>Designation</span>
+                  <strong id="profileDesignation"></strong>
+                </div>
+                <div>
+                  <span>House tel</span>
+                  <strong id="profileHouseTel"></strong>
+                </div>
+                <div>
+                  <span>Other phone</span>
+                  <strong id="profileOtherPhone"></strong>
+                </div>
+                <div>
+                  <span>AL balance</span>
+                  <strong id="profileBalance"></strong>
+                </div>
+              </div>
+
+              <form id="alForm" class="al-form">
+                <div class="date-grid">
+                  <label>
+                    Start date
+                    <input id="startDateInput" name="startDate" type="date" required>
+                  </label>
+                  <label>
+                    End date
+                    <input id="endDateInput" name="endDate" type="date" required>
+                  </label>
+                </div>
+
+                <fieldset class="leave-type-fieldset">
+                  <legend>Leave type</legend>
+                  <div class="leave-type-grid">
+                    <label class="leave-option">
+                      <input type="radio" name="leaveType" value="annual" checked required>
+                      <span>
+                        <strong>Annual Leave</strong>
+                        <small>Cuti Tahunan</small>
+                      </span>
+                    </label>
+                    <label class="leave-option">
+                      <input type="radio" name="leaveType" value="unpaid" required>
+                      <span>
+                        <strong>Unpaid Leave</strong>
+                        <small>Cuti Tanpa Gaji</small>
+                      </span>
+                    </label>
+                    <label class="leave-option">
+                      <input type="radio" name="leaveType" value="emergency" required>
+                      <span>
+                        <strong>Emergency Leave</strong>
+                        <small>Cuti Kecemasan</small>
+                      </span>
+                    </label>
+                    <label class="leave-option">
+                      <input type="radio" name="leaveType" value="other" required>
+                      <span>
+                        <strong>Others</strong>
+                        <small>Lain-lain</small>
+                      </span>
+                    </label>
+                  </div>
+                </fieldset>
+
+                <label>
+                  Reason
+                  <textarea id="leaveReasonInput" name="reason" rows="3" required placeholder="Enter reason for selected leave type"></textarea>
+                </label>
+
+                <div class="calculation-strip">
+                  <div>
+                    <span>Duration</span>
+                    <strong id="durationValue">1 day</strong>
+                  </div>
+                  <div>
+                    <span>Leave type</span>
+                    <strong id="selectedLeaveTypeValue">Annual Leave</strong>
+                  </div>
+                  <div>
+                    <span id="balanceAfterLabel">AL balance after</span>
+                    <strong id="balanceAfterValue"></strong>
+                  </div>
+                </div>
+
+                <button id="generateButton" type="submit">Generate Leave PDF</button>
+                <p id="formMessage" class="message" role="status"></p>
+              </form>
+            </section>
+
+            <section id="mcFormArea" class="form-area hidden" data-form-area="MC">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Medical Certificate</p>
+                  <h2>MC Submission</h2>
+                </div>
+              </div>
+
+              <div class="profile-grid">
+                <div>
+                  <span>Name</span>
+                  <strong data-worker-field="name"></strong>
+                </div>
+                <div>
+                  <span>Designation</span>
+                  <strong data-worker-field="designation"></strong>
+                </div>
+                <div>
+                  <span>House tel</span>
+                  <strong data-worker-field="houseTel"></strong>
+                </div>
+                <div>
+                  <span>Other phone</span>
+                  <strong data-worker-field="otherTel"></strong>
+                </div>
+                <div>
+                  <span>Worker ID</span>
+                  <strong data-worker-field="workerId"></strong>
+                </div>
+              </div>
+
+              <form id="mcForm" class="al-form">
+                <div class="date-grid">
+                  <label>
+                    MC start date
+                    <input id="mcStartDateInput" name="startDate" type="date" required>
+                  </label>
+                  <label>
+                    MC end date
+                    <input id="mcEndDateInput" name="endDate" type="date" required>
+                  </label>
+                </div>
+
+                <label>
+                  Sickness / reason
+                  <textarea id="mcReasonInput" name="sicknessReason" rows="3" required placeholder="Enter sickness or MC reason"></textarea>
+                </label>
+
+                <div class="calculation-strip">
+                  <div>
+                    <span>Duration</span>
+                    <strong id="mcDurationValue">1 day</strong>
+                  </div>
+                  <div>
+                    <span>Calendar entry</span>
+                    <strong>Medical Certificate</strong>
+                  </div>
+                  <div>
+                    <span>AL balance</span>
+                    <strong>Not affected</strong>
+                  </div>
+                </div>
+
+                <button id="mcGenerateButton" type="submit">Generate MC PDF</button>
+                <p id="mcFormMessage" class="message" role="status"></p>
+              </form>
+            </section>
+
+            <section id="kpiFormArea" class="form-area hidden" data-form-area="KPI">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">KPI</p>
+                  <h2>Monthly Performance Evaluation</h2>
+                </div>
+              </div>
+
+              <div class="profile-grid">
+                <div>
+                  <span>Name</span>
+                  <strong data-worker-field="name"></strong>
+                </div>
+                <div>
+                  <span>Designation</span>
+                  <strong data-worker-field="designation"></strong>
+                </div>
+                <div>
+                  <span>Department</span>
+                  <strong data-worker-field="department"></strong>
+                </div>
+                <div>
+                  <span>Worker ID</span>
+                  <strong data-worker-field="workerId"></strong>
+                </div>
+                <div>
+                  <span>Default evaluator</span>
+                  <strong data-worker-field="evaluatorName"></strong>
+                </div>
+              </div>
+
+              <form id="kpiForm" class="kpi-form" novalidate>
+                <div class="kpi-wizard-header">
+                  <div>
+                    <span class="eyebrow">Step</span>
+                    <strong id="kpiStepLabel">Overview</strong>
+                  </div>
+                  <div id="kpiStepProgress" class="kpi-step-progress" aria-label="KPI step progress"></div>
+                </div>
+
+                <section class="kpi-step" data-kpi-step="overview">
+                  <div id="kpiOverviewInstruction"></div>
+
+                  <div class="profile-form-grid">
+                    <label>
+                      KPI month
+                      <input id="kpiMonthInput" name="kpiMonth" type="month" required>
+                    </label>
+                    <label>
+                      Evaluator name
+                      <input id="kpiEvaluatorInput" name="evaluatorName" type="text" required>
+                    </label>
+                  </div>
+
+                  <label>
+                    Task list
+                    <textarea id="kpiTaskListInput" name="taskList" rows="4" required placeholder="Enter task list for the selected month"></textarea>
+                  </label>
+                </section>
+
+                <div id="kpiSectionsContainer" class="kpi-sections"></div>
+
+                <section class="kpi-step hidden" data-kpi-step="summary">
+                  <div class="section-heading compact-heading">
+                    <div>
+                      <p class="eyebrow">Summary</p>
+                      <h2>Attendance And Activities</h2>
+                    </div>
+                  </div>
+                  <div id="kpiSummaryInstruction"></div>
+                  <div id="kpiOptionsContainer" class="profile-form-grid"></div>
+                </section>
+
+                <section class="kpi-step hidden" data-kpi-step="feedback">
+                  <div id="kpiFeedbackInstruction"></div>
+
+                  <label>
+                    Worker feedback
+                    <textarea id="kpiWorkerFeedbackInput" name="workerFeedback" rows="4" placeholder="Optional worker feedback"></textarea>
+                  </label>
+
+                  <label>
+                    Training needs
+                    <textarea id="kpiTrainingNeedsInput" name="trainingNeeds" rows="3" placeholder="Optional training needs"></textarea>
+                  </label>
+
+                  <label>
+                    Evaluator feedback
+                    <textarea id="kpiEvaluatorFeedbackInput" name="evaluatorFeedback" rows="3" placeholder="Optional evaluator feedback"></textarea>
+                  </label>
+                </section>
+
+                <div class="kpi-wizard-actions">
+                  <button id="kpiPrevButton" class="ghost-button" type="button">Previous</button>
+                  <button id="kpiNextButton" class="ghost-button" type="button">Next</button>
+                </div>
+                <button id="kpiGenerateButton" class="hidden" type="submit">Generate KPI PDF</button>
+                <p id="kpiFormMessage" class="message" role="status"></p>
+              </form>
+            </section>
+
+            <section id="expenseFormArea" class="form-area hidden" data-form-area="EXP">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Expenses</p>
+                  <h2>Expense Claim</h2>
+                </div>
+              </div>
+
+              <div class="profile-grid">
+                <div>
+                  <span>Name</span>
+                  <strong data-worker-field="name"></strong>
+                </div>
+                <div>
+                  <span>Worker ID</span>
+                  <strong data-worker-field="workerId"></strong>
+                </div>
+                <div>
+                  <span>Department</span>
+                  <strong data-worker-field="department"></strong>
+                </div>
+                <div>
+                  <span>Default supervisor</span>
+                  <strong data-worker-field="evaluatorName"></strong>
+                </div>
+              </div>
+
+              <form id="expenseForm" class="expense-form">
+                <div class="profile-form-grid">
+                  <label>
+                    Claim month
+                    <input id="expenseMonthInput" name="claimMonth" type="month" required>
+                  </label>
+                  <label>
+                    Site
+                    <input id="expenseSiteInput" name="site" type="text">
+                  </label>
+                  <label>
+                    Supervisor
+                    <input id="expenseSupervisorInput" name="supervisorName" type="text" required>
+                  </label>
+                  <label>
+                    Advances
+                    <input id="expenseAdvancesInput" name="advances" type="number" min="0" step="0.01" value="0">
+                  </label>
+                </div>
+
+                <div class="expense-command-bar">
+                  <div class="calculation-strip expense-summary-strip">
+                    <div>
+                      <span>Claim lines</span>
+                      <strong id="expenseLineCountValue">0 lines</strong>
+                    </div>
+                    <div>
+                      <span>Total amount</span>
+                      <strong id="expenseTotalValue">RM 0.00</strong>
+                    </div>
+                    <div>
+                      <span>Reimburse</span>
+                      <strong id="expenseReimburseValue">RM 0.00</strong>
+                    </div>
+                  </div>
+                  <div class="expense-row-actions">
+                    <button id="expenseAddLineButton" class="ghost-button expense-add-button" type="button">+ Add row</button>
+                    <button id="expenseRemoveLineButton" class="danger-button expense-remove-button" type="button">Remove row</button>
+                  </div>
+                </div>
+
+                <div id="expenseLinesBody" class="expense-lines"></div>
+
+                <div class="expense-submit-row">
+                  <p id="expenseFormMessage" class="message" role="status"></p>
+                  <button id="expenseGenerateButton" class="expense-submit-button" type="submit">Generate PDF</button>
+                </div>
+              </form>
+            </section>
+
+            <section id="otFormArea" class="form-area hidden" data-form-area="OT">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Overtime</p>
+                  <h2>Overtime Claim</h2>
+                </div>
+              </div>
+
+              <div class="profile-grid">
+                <div>
+                  <span>Name</span>
+                  <strong data-worker-field="name"></strong>
+                </div>
+                <div>
+                  <span>Worker ID</span>
+                  <strong data-worker-field="workerId"></strong>
+                </div>
+                <div>
+                  <span>Department</span>
+                  <strong data-worker-field="department"></strong>
+                </div>
+              </div>
+
+              <form id="otForm" class="expense-form">
+                <div class="profile-form-grid">
+                  <label>
+                    Claim month
+                    <input id="otMonthInput" name="claimMonth" type="month" required>
+                  </label>
+                </div>
+
+                <div class="expense-command-bar">
+                  <div class="calculation-strip expense-summary-strip">
+                    <div>
+                      <span>OT lines</span>
+                      <strong id="otLineCountValue">0 lines</strong>
+                    </div>
+                    <div>
+                      <span>Total hours</span>
+                      <strong id="otTotalHoursValue">0 h</strong>
+                    </div>
+                    <div>
+                      <span>1.5x / 2x / 3x</span>
+                      <strong id="otRateSplitValue">0 / 0 / 0</strong>
+                    </div>
+                  </div>
+                  <div class="expense-row-actions">
+                    <button id="otAddLineButton" class="ghost-button expense-add-button" type="button">+ Add row</button>
+                    <button id="otRemoveLineButton" class="danger-button expense-remove-button" type="button">Remove row</button>
+                  </div>
+                </div>
+
+                <div id="otLinesBody" class="expense-lines"></div>
+
+                <div class="expense-submit-row">
+                  <p id="otFormMessage" class="message" role="status"></p>
+                  <button id="otGenerateButton" class="expense-submit-button" type="submit">Generate PDF</button>
+                </div>
+              </form>
+            </section>
+          </div>
+        </section>
+
+        <section id="profilePanel" class="panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Profile</p>
+              <h2>My Information</h2>
+            </div>
+            <span class="status-pill">Used for autofill</span>
+          </div>
+
+          <form id="profileForm" class="profile-form">
+            <div class="profile-form-grid">
+              <label>
+                Worker ID
+                <input id="profileWorkerIdInput" name="workerId" type="text" readonly>
+              </label>
+              <label>
+                Name
+                <input id="profileNameInput" name="name" type="text" required>
+              </label>
+              <label>
+                Designation
+                <input id="profileDesignationInput" name="designation" type="text">
+              </label>
+              <label>
+                Department
+                <input id="profileDepartmentInput" name="department" type="text">
+              </label>
+              <label>
+                House phone
+                <input id="profileHouseTelInput" name="houseTel" type="text">
+              </label>
+              <label>
+                Other phone
+                <input id="profileOtherTelInput" name="otherTel" type="text">
+              </label>
+              <label>
+                KPI evaluator name
+                <input id="profileEvaluatorNameInput" name="evaluatorName" type="text">
+              </label>
+              <label>
+                AL entitlement (days)
+                <input id="profileEntitlementInput" name="annualLeaveEntitlement" type="number" min="0" step="0.5">
+              </label>
+              <label>
+                Employment type
+                <select id="profileEmploymentTypeInput" name="employmentType">
+                  <option value="permanent">Permanent</option>
+                  <option value="contract">Contract</option>
+                </select>
+              </label>
+              <div class="employment-date-row">
+                <label>
+                  Employment start date
+                  <input id="profileEmploymentStartDateInput" name="employmentStartDate" type="date">
+                </label>
+                <label>
+                  Employment end date
+                  <input id="profileEmploymentEndDateInput" name="employmentEndDate" type="date">
+                </label>
+              </div>
+            </div>
+
+            <div class="calculation-strip">
+              <div>
+                <span>Employment period</span>
+                <strong id="profilePeriodReadout"></strong>
+              </div>
+              <div>
+                <span>AL taken</span>
+                <strong id="profileTakenReadout"></strong>
+              </div>
+              <div>
+                <span>AL balance</span>
+                <strong id="profileBalanceReadout"></strong>
+              </div>
+            </div>
+
+            <button id="saveProfileButton" type="submit">Save Profile</button>
+            <p id="profileMessage" class="message" role="status"></p>
+          </form>
+        </section>
+
+        <section id="kpiPanel" class="panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">KPI Tracker</p>
+              <h2 id="kpiTrackerTitle">Monthly KPI Status</h2>
+            </div>
+            <span class="status-pill">Annual overview</span>
+          </div>
+          <div id="kpiTrackerGrid" class="kpi-tracker-grid"></div>
+        </section>
+
+        <section id="calendarPanel" class="panel">
+          <div class="calendar-layout">
+            <div class="calendar-main">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Calendar</p>
+                  <h2 id="calendarTitle">Month</h2>
+                </div>
+                <div class="month-controls">
+                  <button id="previousMonthButton" class="ghost-button" type="button">Previous</button>
+                  <button id="todayButton" class="ghost-button" type="button">Today</button>
+                  <button id="nextMonthButton" class="ghost-button" type="button">Next</button>
+                </div>
+              </div>
+              <div class="calendar-weekdays">
+                <span>Sun</span>
+                <span>Mon</span>
+                <span>Tue</span>
+                <span>Wed</span>
+                <span>Thu</span>
+                <span>Fri</span>
+                <span>Sat</span>
+              </div>
+              <div id="calendarGrid" class="calendar-grid"></div>
+              <div class="calendar-legend" aria-label="Calendar form legend">
+                <span><i class="legend-swatch al"></i> Annual Leave</span>
+                <span><i class="legend-swatch el"></i> Emergency Leave</span>
+                <span><i class="legend-swatch mc"></i> Medical Certificate</span>
+                <span><i class="legend-swatch holiday"></i> Holiday</span>
+              </div>
+            </div>
+
+            <aside class="holiday-sidebar" aria-labelledby="holidayListTitle">
+              <div class="section-heading compact-heading">
+                <div>
+                  <p class="eyebrow">MSB 2026</p>
+                  <h2 id="holidayListTitle">Upcoming Holidays</h2>
+                </div>
+              </div>
+              <ol id="holidayList" class="holiday-list"></ol>
+              <p class="holiday-note">* Tertakluk kepada perubahan.</p>
+            </aside>
+            </div>
+        </section>
+
+        <section id="historyPanel" class="panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Records</p>
+              <h2>Generated PDFs</h2>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Form</th>
+                  <th>Type</th>
+                  <th>Dates</th>
+                  <th>Days/Lines</th>
+                  <th>Created</th>
+                  <th>PDF</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="historyRows"></tbody>
+            </table>
+          </div>
+          <p id="historyMessage" class="message" role="status"></p>
+        </section>
+
+        <section id="othersPanel" class="panel">
+          <div class="layout others-layout">
+            <aside class="form-list">
+              <h2>Forms</h2>
+              <div id="otherFormCards" class="form-cards"></div>
+              <div id="otherAdminPanel" class="other-admin hidden">
+                <h3>Manage PDFs</h3>
+                <form id="otherUploadForm" class="other-upload-form">
+                  <input id="otherUploadInput" name="file" type="file" accept="application/pdf,.pdf" required>
+                  <button id="otherUploadButton" type="submit">Upload PDF</button>
+                </form>
+                <div id="otherAdminRows" class="other-admin-rows"></div>
+                <p id="otherAdminMessage" class="message" role="status"></p>
+              </div>
+            </aside>
+
+            <section class="form-area pdf-viewer-area" aria-labelledby="otherPdfTitle">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Others</p>
+                  <h2 id="otherPdfTitle">PDF Viewer</h2>
+                </div>
+                <a id="otherPdfOpenLink" class="ghost-link" href="#" target="_blank" rel="noreferrer">Open PDF</a>
+              </div>
+              <iframe id="otherPdfViewer" class="pdf-viewer" title="Selected PDF"></iframe>
+            </section>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

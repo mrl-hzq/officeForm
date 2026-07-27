@@ -1,0 +1,59 @@
+# officeForm development build and Tailscale registry configuration.
+# Registry server: 100.95.211.72:5000
+
+services:
+  web:
+    image: 100.95.211.72:5000/officeform:${OFFICEFORM_IMAGE_TAG:-1.0.1}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      TZ: Asia/Kuala_Lumpur
+      ENVIRONMENT: development
+      APP_HOST: 0.0.0.0
+      APP_PORT: "3000"
+      # This Compose file has no db service, so use native Windows MySQL.
+      DB_SERVER: host.docker.internal
+      DB_PORT: "3306"
+      DB_SCHEMA: officeform
+      DB_USER: root
+      DB_PASSWORD: root
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-secret-change-in-production}
+      AUTH_SHARED_PASSWORD: ${AUTH_SHARED_PASSWORD:-abcd1234}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./generated:/app/generated
+      - ./formOri:/app/formOri:ro
+      - ./others:/app/others
+
+# Windows Docker Desktop must contain this Docker Engine setting, followed by
+# Apply & restart:
+#
+#   "insecure-registries": ["100.95.211.72:5000"]
+#
+# Run these commands from C:\Homelab\officeForm in PowerShell:
+#
+# 1. Build and tag the image using the image name above:
+#    docker compose -f dev-docker-compose.yaml build web
+#
+# 2. Push the image through Tailscale to the server registry:
+#    docker compose -f dev-docker-compose.yaml push web
+#
+# Equivalent direct push command:
+#    docker push 100.95.211.72:5000/officeform:1.0.1
+#
+# Verify the pushed repository from Windows:
+#    Invoke-RestMethod http://100.95.211.72:5000/v2/_catalog
+#    Invoke-RestMethod http://100.95.211.72:5000/v2/officeform/tags/list
+#
+# On the Linux registry server, inspect and pull the image:
+#    curl http://localhost:5000/v2/_catalog
+#    curl http://localhost:5000/v2/officeform/tags/list
+#    docker pull localhost:5000/officeform:1.0.1
+#    docker image ls
+#
+# To publish a different version from PowerShell:
+#    $env:OFFICEFORM_IMAGE_TAG = "1.0.2"
+#    docker compose -f dev-docker-compose.yaml build web
+#    docker compose -f dev-docker-compose.yaml push web

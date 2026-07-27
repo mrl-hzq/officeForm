@@ -1,0 +1,11 @@
+{
+  "name": "office-form-pdf-system",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Internal office form system for worker ID login, AL form PDF generation, and calendar view.",
+  "type": "module",
+  "scripts": {
+    "start": "python app_entry.py",
+    "check": "python -B -c \"import pathlib; files=list(pathlib.Path('app').glob('*.py'))+[pathlib.Path('app_entry.py')]+list(pathlib.Path('scripts').glob('*.py')); [compile(p.read_text(encoding='utf-8'), str(p), 'exec') for p in files]; print('Python syntax OK')\""
+  }
+}
