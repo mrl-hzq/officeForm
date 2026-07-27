@@ -175,13 +175,17 @@ def affects_annual_leave(submission: dict) -> bool:
     return form_type in {"AL", "EL"}
 
 
-def count_al_taken_from_list(worker_id: str, period_start: date, period_end: date, submissions: list[dict]) -> int:
-    total = 0
+def count_al_taken_from_list(worker_id: str, period_start: date, period_end: date, submissions: list[dict]) -> float:
+    total = 0.0
     normalized = normalize_worker_id(worker_id)
     for item in submissions:
         if normalize_worker_id(item.get("workerId")) != normalized:
             continue
         if not affects_annual_leave(item):
+            continue
+        duration = item.get("durationDays")
+        if duration is not None:
+            total += float(duration)
             continue
         start = parse_optional_date(item.get("calendarStart") or item.get("startDate"))
         end = parse_optional_date(item.get("calendarEnd") or item.get("endDate"))
@@ -190,7 +194,7 @@ def count_al_taken_from_list(worker_id: str, period_start: date, period_end: dat
         overlap_start = max(start, period_start)
         overlap_end = min(end, period_end)
         if overlap_end >= overlap_start:
-            total += (overlap_end - overlap_start).days + 1
+            total += float((overlap_end - overlap_start).days + 1)
     return total
 
 
@@ -209,7 +213,7 @@ def enrich_worker(worker: dict, taken_to_date: float = 0.0) -> dict:
     return enriched
 
 
-def get_leave_summary(worker: dict, duration_days: int) -> dict:
+def get_leave_summary(worker: dict, duration_days: float) -> dict:
     entitlement = float(worker.get("annualLeaveEntitlement") or 0)
     taken_to_date = float(worker.get("annualLeaveTaken") or 0)
     applied_days = max(float(duration_days or 0), 0)

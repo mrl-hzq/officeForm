@@ -344,6 +344,8 @@ const elements = {
   balanceAfterValue: document.querySelector("#balanceAfterValue"),
   generateButton: document.querySelector("#generateButton"),
   formMessage: document.querySelector("#formMessage"),
+  halfDayCheckbox: document.querySelector("#halfDayCheckbox"),
+  halfDayLabel: document.querySelector("#halfDayLabel"),
   mcForm: document.querySelector("#mcForm"),
   mcStartDateInput: document.querySelector("#mcStartDateInput"),
   mcEndDateInput: document.querySelector("#mcEndDateInput"),
@@ -1011,13 +1013,15 @@ function calculateAl() {
     return null;
   }
 
-  const durationDays = inclusiveDayCount(start, end);
+  const isHalfDay = startValue === endValue && elements.halfDayCheckbox.checked;
+  const rawDays = inclusiveDayCount(start, end);
+  const durationDays = isHalfDay ? 0.5 : rawDays;
   const balanceBefore = Number(state.worker.annualLeaveBalance || 0);
   const leaveType = getSelectedLeaveType();
   const affectsAnnualLeave = alDeductingLeaveTypes.has(leaveType);
   const balanceAfter = affectsAnnualLeave ? Math.max(balanceBefore - durationDays, 0) : balanceBefore;
 
-  elements.durationValue.textContent = `${durationDays} ${durationDays === 1 ? "day" : "days"}`;
+  elements.durationValue.textContent = durationDays === 0.5 ? "0.5 day" : `${durationDays} ${durationDays === 1 ? "day" : "days"}`;
   elements.balanceAfterLabel.textContent = affectsAnnualLeave ? "AL balance after" : "AL balance";
   elements.balanceAfterValue.textContent = affectsAnnualLeave ? `${balanceAfter} days` : `${balanceBefore} days (unchanged)`;
   elements.selectedLeaveTypeValue.textContent = leaveTypeLabels[leaveType] || "-";
@@ -1028,7 +1032,8 @@ function calculateAl() {
     durationDays,
     leaveType,
     affectsAnnualLeave,
-    balanceAfter
+    balanceAfter,
+    isHalfDay
   };
 }
 
@@ -1533,6 +1538,7 @@ function renderWorker(options = {}) {
     elements.otMonthInput.value = monthInputValue();
   }
   calculateAl();
+  toggleHalfDayVisibility();
   calculateMc();
   renderKpiForm();
   renderExpenseForm();
@@ -1950,14 +1956,27 @@ elements.tabs.forEach(tab => {
   tab.addEventListener("click", () => setActiveTab(tab.dataset.tab));
 });
 
+function toggleHalfDayVisibility() {
+  const show = elements.startDateInput.value === elements.endDateInput.value
+    && !!elements.startDateInput.value;
+  elements.halfDayLabel.style.display = show ? "" : "none";
+  if (!show) elements.halfDayCheckbox.checked = false;
+}
+
 elements.startDateInput.addEventListener("change", () => {
   if (!elements.endDateInput.value || elements.endDateInput.value < elements.startDateInput.value) {
     elements.endDateInput.value = elements.startDateInput.value;
   }
+  toggleHalfDayVisibility();
   calculateAl();
 });
 
-elements.endDateInput.addEventListener("change", calculateAl);
+elements.endDateInput.addEventListener("change", () => {
+  toggleHalfDayVisibility();
+  calculateAl();
+});
+
+elements.halfDayCheckbox.addEventListener("change", calculateAl);
 
 elements.leaveTypeInputs.forEach(input => {
   input.addEventListener("change", calculateAl);
@@ -2071,6 +2090,7 @@ elements.alForm.addEventListener("submit", async event => {
       startDate: calculation.startDate,
       endDate: calculation.endDate,
       leaveType: calculation.leaveType,
+      isHalfDay: calculation.isHalfDay || false,
       reason
     };
     const { submission } = await api("/api/submissions/al", {
