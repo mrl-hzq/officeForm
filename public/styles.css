@@ -1304,6 +1304,18 @@ label {
   white-space: nowrap;
 }
 
+.calendar-entry.has-pdf {
+  cursor: pointer;
+  outline: 1px dashed transparent;
+  outline-offset: 1px;
+  transition: outline-color 0.15s ease, opacity 0.15s ease;
+}
+
+.calendar-entry.has-pdf:hover {
+  outline-color: currentColor;
+  opacity: 0.92;
+}
+
 .calendar-entry.al,
 .legend-swatch.al {
   background: var(--entry-al-bg);

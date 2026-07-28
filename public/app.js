@@ -1824,10 +1824,14 @@ function renderCalendar() {
               const type = getCalendarType(item);
               const displayName = getCalendarDisplayName(item.workerName, item.workerId);
               const title = `${item.workerName || item.workerId} - ${calendarTypeLabels[type]}`;
+              const tag = item.pdfUrl ? "a" : "span";
+              const hrefAttr = item.pdfUrl
+                ? ` href="${item.pdfUrl}" target="_blank" rel="noreferrer"`
+                : "";
               return `
-                <span class="calendar-entry ${type.toLowerCase()}" title="${escapeHtml(title)}">
+                <${tag} class="calendar-entry ${type.toLowerCase()}${item.pdfUrl ? " has-pdf" : ""}" title="${escapeHtml(title)}"${hrefAttr}>
                   ${escapeHtml(displayName)}
-                </span>
+                </${tag}>
               `;
             })
             .join("")}

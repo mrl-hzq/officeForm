@@ -101,6 +101,7 @@ def _row_to_submission(row: dict) -> dict:
 
 
 def _row_to_calendar_entry(row: dict) -> dict:
+    pdf_file_name = row.get("pdf_file_name")
     return {
         "id": row.get("id"),
         "workerId": row.get("worker_id"),
@@ -112,6 +113,7 @@ def _row_to_calendar_entry(row: dict) -> dict:
         "durationDays": row.get("duration_days"),
         "isHalfDay": bool(row.get("is_half_day")),
         "halfDayPeriod": row.get("half_day_period"),
+        "pdfUrl": f"/generated/pdfs/{pdf_file_name}" if pdf_file_name else None,
         "isOwn": row.get("worker_id") == g.worker_id,
     }
 
@@ -123,7 +125,7 @@ def calendar_entries():
         """SELECT
              s.id, s.worker_id, COALESCE(w.name, s.worker_id) AS worker_name,
              s.form_type, s.leave_type, s.start_date, s.end_date, s.duration_days,
-             s.is_half_day, s.half_day_period, s.created_at
+             s.is_half_day, s.half_day_period, s.pdf_file_name, s.created_at
            FROM submissions s
            LEFT JOIN workers w ON w.worker_id = s.worker_id
            WHERE s.form_type IN ('AL', 'EL', 'MC')

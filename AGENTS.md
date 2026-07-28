@@ -153,7 +153,7 @@ Native Windows PDF generation needs LibreOffice available to the bridge path for
 - Form type recognition is handled by color legend below the calendar.
 - KPI and Expense Claim do not appear in the shared calendar.
 - The frontend also has a hardcoded 2026 company holiday list in `public/app.js`.
-- Shared calendar entries intentionally do not expose reasons or PDF download links.
+- Shared calendar entries intentionally do not expose reasons, but each AL/EL/MC entry is a clickable link to its generated PDF. The `/generated/pdfs/<filename>` route lazy-regenerates the PDF on first request if the file is missing.
 
 ## Frontend Notes
 
