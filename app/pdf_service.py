@@ -23,6 +23,8 @@ def generate_al(*, template_path, workbook_path, pdf_path, worker, start_iso, en
                 half_day_period=None):
     from scripts.generate_al_pdf import generate_al_pdf
 
+    remove_entitlement = bool(leave_summary.get("remove_entitlement")) if leave_summary else False
+
     try:
         generate_al_pdf(
             template_path=template_path,
@@ -38,9 +40,9 @@ def generate_al(*, template_path, workbook_path, pdf_path, worker, start_iso, en
             duration_days=duration_days,
             leave_type=leave_type,
             reason=reason,
-            leave_entitlement=float(leave_summary["entitlement"]),
-            leave_taken=float(leave_summary["takenToDate"]),
-            leave_balance=float(leave_summary["balanceAfter"]),
+            leave_entitlement="" if remove_entitlement else float(leave_summary["entitlement"]),
+            leave_taken="" if remove_entitlement else float(leave_summary["takenToDate"]),
+            leave_balance="" if remove_entitlement else float(leave_summary["balanceAfter"]),
             application_date=application_iso,
             half_day_period=half_day_period,
         )

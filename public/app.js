@@ -348,6 +348,7 @@ const elements = {
   halfDayLabel: document.querySelector("#halfDayLabel"),
   halfDayPeriodGroup: document.querySelector("#halfDayPeriodGroup"),
   halfDayPeriodInputs: document.querySelectorAll("input[name='halfDayPeriod']"),
+  removeEntitlementCheckbox: document.querySelector("#removeEntitlementCheckbox"),
   mcForm: document.querySelector("#mcForm"),
   mcStartDateInput: document.querySelector("#mcStartDateInput"),
   mcEndDateInput: document.querySelector("#mcEndDateInput"),
@@ -2111,6 +2112,7 @@ elements.alForm.addEventListener("submit", async event => {
       leaveType: calculation.leaveType,
       isHalfDay: calculation.isHalfDay || false,
       halfDayPeriod: calculation.halfDayPeriod,
+      removeEntitlement: elements.removeEntitlementCheckbox.checked,
       reason
     };
     const { submission } = await api("/api/submissions/al", {

@@ -212,6 +212,8 @@ def create_al_submission():
     affects_al = leave_type in AL_DEDUCTING_LEAVE_TYPES
     annual_leave_days = duration_days if affects_al else 0
     leave_summary = get_leave_summary(worker, annual_leave_days)
+    if bool(body.get("removeEntitlement")):
+        leave_summary["remove_entitlement"] = True
     leave_type_meta = LEAVE_TYPES[leave_type]
     now = datetime.now()
     created_at = datetime.now(timezone.utc).replace(microsecond=0)
