@@ -765,11 +765,17 @@
               <div class="section-heading">
                 <div>
                   <p class="eyebrow">Others</p>
-                  <h2 id="otherPdfTitle">PDF Viewer</h2>
+                  <h2 id="otherPdfTitle">Viewer</h2>
                 </div>
-                <a id="otherPdfOpenLink" class="ghost-link" href="#" target="_blank" rel="noreferrer">Open PDF</a>
+                <a id="otherPdfOpenLink" class="ghost-link" href="#" target="_blank" rel="noreferrer">Open file</a>
               </div>
-              <iframe id="otherPdfViewer" class="pdf-viewer" title="Selected PDF"></iframe>
+              <div id="otherViewerWrapper" class="pdf-viewer-wrapper">
+                <iframe id="otherPdfViewer" class="pdf-viewer" title="Selected file"></iframe>
+                <div id="otherPreviewUnavailable" class="preview-unavailable hidden">
+                  <p>Preview not available.</p>
+                  <p>Use <a id="otherPreviewOpenLink" href="#" target="_blank" rel="noreferrer">Open file</a> to view or download it locally.</p>
+                </div>
+              </div>
             </section>
           </div>
         </section>

@@ -411,6 +411,9 @@ const elements = {
   otherPdfTitle: document.querySelector("#otherPdfTitle"),
   otherPdfOpenLink: document.querySelector("#otherPdfOpenLink"),
   otherPdfViewer: document.querySelector("#otherPdfViewer"),
+  otherViewerWrapper: document.querySelector("#otherViewerWrapper"),
+  otherPreviewUnavailable: document.querySelector("#otherPreviewUnavailable"),
+  otherPreviewOpenLink: document.querySelector("#otherPreviewOpenLink"),
   otherAdminPanel: document.querySelector("#otherAdminPanel"),
   otherUploadForm: document.querySelector("#otherUploadForm"),
   otherUploadInput: document.querySelector("#otherUploadInput"),
@@ -778,27 +781,40 @@ function renderOtherForms() {
 
   if (!selectedForm) {
     elements.otherFormCards.innerHTML = "";
-    elements.otherPdfTitle.textContent = "PDF Viewer";
+    elements.otherPdfTitle.textContent = "Viewer";
     elements.otherPdfOpenLink.removeAttribute("href");
     elements.otherPdfViewer.removeAttribute("src");
+    elements.otherPdfViewer.classList.remove("hidden");
+    elements.otherPreviewUnavailable.classList.add("hidden");
     renderOtherAdminRows();
     return;
   }
 
   elements.otherFormCards.innerHTML = state.otherForms
-    .map(form => `
+    .map(form => {
+      const badge = getOtherFormExtension(form).replace(/^\./, "").toUpperCase() || "FILE";
+      return `
       <button
         class="form-card ready ${form.id === selectedForm.id ? "active" : ""}"
         type="button"
         data-other-form-id="${form.id}"
       >
         <strong>${escapeHtml(form.name)}</strong>
-        <span>PDF</span>
+        <span>${escapeHtml(badge)}</span>
       </button>
-    `)
+    `;
+    })
     .join("");
   selectOtherForm(selectedForm.id);
   renderOtherAdminRows();
+}
+
+const previewableExtensions = new Set([".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"]);
+
+function getOtherFormExtension(form) {
+  const fileName = form?.fileName || "";
+  const dotIndex = fileName.lastIndexOf(".");
+  return dotIndex >= 0 ? fileName.slice(dotIndex).toLowerCase() : "";
 }
 
 function selectOtherForm(formId) {
@@ -807,13 +823,26 @@ function selectOtherForm(formId) {
     return;
   }
 
-  const pdfUrl = getOtherFormUrl(selectedForm);
+  const fileUrl = getOtherFormUrl(selectedForm);
+  const ext = getOtherFormExtension(selectedForm);
+  const canPreview = previewableExtensions.has(ext);
+
   elements.otherFormCards.querySelectorAll("[data-other-form-id]").forEach(card => {
     card.classList.toggle("active", card.dataset.otherFormId === selectedForm.id);
   });
   elements.otherPdfTitle.textContent = selectedForm.name;
-  elements.otherPdfOpenLink.href = pdfUrl;
-  elements.otherPdfViewer.src = pdfUrl;
+  elements.otherPdfOpenLink.href = fileUrl;
+  elements.otherPreviewOpenLink.href = fileUrl;
+
+  if (canPreview) {
+    elements.otherPdfViewer.src = fileUrl;
+    elements.otherPdfViewer.classList.remove("hidden");
+    elements.otherPreviewUnavailable.classList.add("hidden");
+  } else {
+    elements.otherPdfViewer.removeAttribute("src");
+    elements.otherPdfViewer.classList.add("hidden");
+    elements.otherPreviewUnavailable.classList.remove("hidden");
+  }
 }
 
 function renderOtherAdminRows() {
