@@ -16,7 +16,8 @@ const state = {
   calendarDate: new Date(),
   selectedForm: "AL",
   kpiStep: 0,
-  kpiValidationAttempted: false
+  kpiValidationAttempted: false,
+  draftsRestored: false
 };
 
 document.documentElement.dataset.theme = state.theme;
@@ -1018,6 +1019,7 @@ function clearAuth() {
   state.submissions = [];
   state.otherForms = [];
   localStorage.removeItem("token");
+  state.draftsRestored = false;
 }
 
 function showView(view) {
@@ -1604,6 +1606,10 @@ function renderWorker(options = {}) {
   renderExpenseForm();
   renderOtForm();
   renderFormAreas();
+  if (!state.draftsRestored) {
+    state.draftsRestored = true;
+    restoreAllDrafts();
+  }
 }
 
 function renderWorkerFieldCopies() {
@@ -2172,6 +2178,7 @@ elements.alForm.addEventListener("submit", async event => {
       `PDF generated: ${submission.pdfFileName}`,
       "success"
     );
+    drafts.al.clear();
     await refreshWorkerProfile({ resetDates: false });
     await loadSubmissions();
     window.open(submission.pdfUrl, "_blank", "noreferrer");
@@ -2225,6 +2232,7 @@ elements.mcForm.addEventListener("submit", async event => {
       `PDF generated: ${submission.pdfFileName}`,
       "success"
     );
+    drafts.mc.clear();
     await loadSubmissions();
     window.open(submission.pdfUrl, "_blank", "noreferrer");
   } catch (error) {
@@ -2314,6 +2322,7 @@ elements.kpiForm.addEventListener("submit", async event => {
       `PDF generated: ${submission.pdfFileName}`,
       "success"
     );
+    drafts.kpi.clear();
     state.kpiValidationAttempted = false;
     renderKpiWizard();
     await loadSubmissions();
@@ -2379,6 +2388,7 @@ elements.expenseForm.addEventListener("submit", async event => {
       `PDF generated: ${submission.pdfFileName}`,
       "success"
     );
+    drafts.expense.clear();
     await loadSubmissions();
     window.open(submission.pdfUrl, "_blank", "noreferrer");
   } catch (error) {
@@ -2443,6 +2453,7 @@ elements.otForm.addEventListener("submit", async event => {
       `PDF generated: ${submission.pdfFileName}`,
       "success"
     );
+    drafts.ot.clear();
     await loadSubmissions();
     window.open(submission.pdfUrl, "_blank", "noreferrer");
   } catch (error) {
@@ -2542,6 +2553,264 @@ elements.nextMonthButton.addEventListener("click", () => {
 elements.todayButton.addEventListener("click", () => {
   state.calendarDate = new Date();
   renderCalendar();
+});
+
+// ----- Form draft persistence (localStorage, per worker) -----
+const DRAFT_PREFIX = "officeFormDraft.";
+
+function draftStorageKey(formKey) {
+  return state.worker ? `${DRAFT_PREFIX}${state.worker.workerId}.${formKey}` : null;
+}
+
+function saveDraft(formKey, data) {
+  const key = draftStorageKey(formKey);
+  if (!key) return;
+  try { localStorage.setItem(key, JSON.stringify(data)); } catch (e) { /* ignore quota */ }
+}
+
+function loadDraftObj(formKey) {
+  const key = draftStorageKey(formKey);
+  if (!key) return null;
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+
+function removeDraft(formKey) {
+  const key = draftStorageKey(formKey);
+  if (!key) return;
+  try { localStorage.removeItem(key); } catch (e) {}
+}
+
+const draftSaveTimers = {};
+function scheduleDraftSave(formKey, serialize) {
+  clearTimeout(draftSaveTimers[formKey]);
+  draftSaveTimers[formKey] = setTimeout(() => saveDraft(formKey, serialize()), 400);
+}
+
+function serializeAlDraft() {
+  const start = elements.startDateInput.value;
+  const end = elements.endDateInput.value;
+  const lt = document.querySelector("input[name='leaveType']:checked");
+  const period = document.querySelector("input[name='halfDayPeriod']:checked");
+  return {
+    startDate: start,
+    endDate: end,
+    leaveType: lt ? lt.value : "annual",
+    reason: elements.leaveReasonInput.value,
+    halfDay: start && start === end ? elements.halfDayCheckbox.checked : false,
+    halfDayPeriod: period ? period.value : "AM",
+    removeEntitlement: elements.removeEntitlementCheckbox.checked
+  };
+}
+
+function restoreAlDraft(d) {
+  if (!d) return;
+  if (d.startDate) elements.startDateInput.value = d.startDate;
+  if (d.endDate) elements.endDateInput.value = d.endDate;
+  const lt = document.querySelector(`input[name='leaveType'][value='${d.leaveType || "annual"}']`);
+  if (lt) lt.checked = true;
+  if (typeof d.reason === "string") elements.leaveReasonInput.value = d.reason;
+  const canHalfDay = elements.startDateInput.value && elements.startDateInput.value === elements.endDateInput.value;
+  elements.halfDayCheckbox.checked = canHalfDay && !!d.halfDay;
+  const period = document.querySelector(`input[name='halfDayPeriod'][value='${d.halfDayPeriod || "AM"}']`);
+  if (period) period.checked = true;
+  elements.removeEntitlementCheckbox.checked = !!d.removeEntitlement;
+  toggleHalfDayVisibility();
+  calculateAl();
+}
+
+function serializeMcDraft() {
+  return {
+    startDate: elements.mcStartDateInput.value,
+    endDate: elements.mcEndDateInput.value,
+    reason: elements.mcReasonInput.value
+  };
+}
+
+function restoreMcDraft(d) {
+  if (!d) return;
+  if (d.startDate) elements.mcStartDateInput.value = d.startDate;
+  if (d.endDate) elements.mcEndDateInput.value = d.endDate;
+  if (typeof d.reason === "string") elements.mcReasonInput.value = d.reason;
+  calculateMc();
+}
+
+function serializeKpiDraft() {
+  const scores = {};
+  kpiSections.forEach(section => {
+    section.items.forEach((_, index) => {
+      const checked = document.querySelector(`[data-kpi-score='${section.key}'][data-kpi-score-index='${index}']:checked`);
+      if (checked) scores[`${section.key}-${index}`] = Number(checked.value);
+    });
+  });
+  const comments = {};
+  kpiSections.forEach(section => {
+    const ta = document.querySelector(`[data-kpi-comment='${section.key}']`);
+    if (ta) comments[section.key] = ta.value;
+  });
+  const options = {};
+  kpiOptionFields.forEach(field => {
+    const sel = document.querySelector(`[data-kpi-option='${field.key}']`);
+    if (sel) options[field.key] = sel.value;
+  });
+  return {
+    month: elements.kpiMonthInput.value,
+    evaluatorName: elements.kpiEvaluatorInput.value,
+    taskList: elements.kpiTaskListInput.value,
+    workerFeedback: elements.kpiWorkerFeedbackInput.value,
+    trainingNeeds: elements.kpiTrainingNeedsInput.value,
+    evaluatorFeedback: elements.kpiEvaluatorFeedbackInput.value,
+    scores,
+    comments,
+    options,
+    step: state.kpiStep
+  };
+}
+
+function restoreKpiDraft(d) {
+  if (!d) return;
+  if (d.month) elements.kpiMonthInput.value = d.month;
+  if (typeof d.evaluatorName === "string") elements.kpiEvaluatorInput.value = d.evaluatorName;
+  if (typeof d.taskList === "string") elements.kpiTaskListInput.value = d.taskList;
+  if (typeof d.workerFeedback === "string") elements.kpiWorkerFeedbackInput.value = d.workerFeedback;
+  if (typeof d.trainingNeeds === "string") elements.kpiTrainingNeedsInput.value = d.trainingNeeds;
+  if (typeof d.evaluatorFeedback === "string") elements.kpiEvaluatorFeedbackInput.value = d.evaluatorFeedback;
+  if (d.scores) {
+    Object.entries(d.scores).forEach(([key, value]) => {
+      const [sectionKey, indexStr] = key.split("-");
+      const radio = document.querySelector(`[data-kpi-score='${sectionKey}'][data-kpi-score-index='${indexStr}'][value='${value}']`);
+      if (radio) radio.checked = true;
+    });
+  }
+  if (d.comments) {
+    Object.entries(d.comments).forEach(([sectionKey, value]) => {
+      const ta = document.querySelector(`[data-kpi-comment='${sectionKey}']`);
+      if (ta) ta.value = value;
+    });
+  }
+  if (d.options) {
+    Object.entries(d.options).forEach(([fieldKey, value]) => {
+      const sel = document.querySelector(`[data-kpi-option='${fieldKey}']`);
+      if (sel) sel.value = value;
+    });
+  }
+  if (typeof d.step === "number" && d.step >= 0 && d.step < kpiStepOrder.length) {
+    state.kpiStep = d.step;
+  }
+  renderKpiWizard();
+}
+
+function serializeExpenseDraft() {
+  const lineCount = elements.expenseLinesBody.querySelectorAll("[data-expense-line]").length;
+  const rows = [];
+  for (let i = 0; i < lineCount; i += 1) {
+    const row = {};
+    expenseColumns.forEach(col => {
+      const input = elements.expenseLinesBody.querySelector(`[data-expense-row='${i}'][data-expense-field='${col.key}']`);
+      if (input) row[col.key] = input.value;
+    });
+    rows.push(row);
+  }
+  return {
+    month: elements.expenseMonthInput.value,
+    monthEnd: elements.expenseMonthEndInput.value,
+    site: elements.expenseSiteInput.value,
+    supervisorName: elements.expenseSupervisorInput.value,
+    advances: elements.expenseAdvancesInput.value,
+    rows
+  };
+}
+
+function restoreExpenseDraft(d) {
+  if (!d) return;
+  if (d.month) elements.expenseMonthInput.value = d.month;
+  if (typeof d.monthEnd === "string") elements.expenseMonthEndInput.value = d.monthEnd;
+  if (typeof d.site === "string") elements.expenseSiteInput.value = d.site;
+  if (typeof d.supervisorName === "string") elements.expenseSupervisorInput.value = d.supervisorName;
+  if (typeof d.advances === "string") elements.expenseAdvancesInput.value = d.advances;
+  if (Array.isArray(d.rows)) {
+    while (elements.expenseLinesBody.querySelectorAll("[data-expense-line]").length < d.rows.length) {
+      addExpenseRow();
+    }
+    d.rows.forEach((row, i) => {
+      if (!row) return;
+      expenseColumns.forEach(col => {
+        const input = elements.expenseLinesBody.querySelector(`[data-expense-row='${i}'][data-expense-field='${col.key}']`);
+        if (input && typeof row[col.key] === "string") input.value = row[col.key];
+      });
+    });
+  }
+  resizeExpenseDescriptions();
+  calculateExpenses();
+}
+
+function serializeOtDraft() {
+  const lineCount = elements.otLinesBody.querySelectorAll("[data-ot-line]").length;
+  const rows = [];
+  for (let i = 0; i < lineCount; i += 1) {
+    const row = {};
+    otColumns.forEach(col => {
+      if (col.key === "hours") return;
+      const input = elements.otLinesBody.querySelector(`[data-ot-row='${i}'][data-ot-field='${col.key}']`);
+      if (input) row[col.key] = input.value;
+    });
+    rows.push(row);
+  }
+  return {
+    month: elements.otMonthInput.value,
+    monthEnd: elements.otMonthEndInput.value,
+    rows
+  };
+}
+
+function restoreOtDraft(d) {
+  if (!d) return;
+  if (d.month) elements.otMonthInput.value = d.month;
+  if (typeof d.monthEnd === "string") elements.otMonthEndInput.value = d.monthEnd;
+  if (Array.isArray(d.rows)) {
+    while (elements.otLinesBody.querySelectorAll("[data-ot-line]").length < d.rows.length) {
+      addOtRow();
+    }
+    d.rows.forEach((row, i) => {
+      if (!row) return;
+      otColumns.forEach(col => {
+        if (col.key === "hours") return;
+        const input = elements.otLinesBody.querySelector(`[data-ot-row='${i}'][data-ot-field='${col.key}']`);
+        if (input && typeof row[col.key] === "string") input.value = row[col.key];
+      });
+    });
+  }
+  resizeExpenseDescriptions(elements.otLinesBody);
+  calculateOt();
+}
+
+const drafts = {
+  al: { serialize: serializeAlDraft, restore: restoreAlDraft, clear: () => removeDraft("al") },
+  mc: { serialize: serializeMcDraft, restore: restoreMcDraft, clear: () => removeDraft("mc") },
+  kpi: { serialize: serializeKpiDraft, restore: restoreKpiDraft, clear: () => removeDraft("kpi") },
+  expense: { serialize: serializeExpenseDraft, restore: restoreExpenseDraft, clear: () => removeDraft("expense") },
+  ot: { serialize: serializeOtDraft, restore: restoreOtDraft, clear: () => removeDraft("ot") }
+};
+
+function restoreAllDrafts() {
+  Object.keys(drafts).forEach(key => {
+    const data = loadDraftObj(key);
+    if (data) drafts[key].restore(data);
+  });
+}
+
+[
+  [elements.alForm, "al"],
+  [elements.mcForm, "mc"],
+  [elements.kpiForm, "kpi"],
+  [elements.expenseForm, "expense"],
+  [elements.otForm, "ot"]
+].forEach(([formEl, key]) => {
+  if (!formEl) return;
+  formEl.addEventListener("input", () => scheduleDraftSave(key, drafts[key].serialize));
+  formEl.addEventListener("change", () => scheduleDraftSave(key, drafts[key].serialize));
 });
 
 applyTheme(state.theme, { persist: false });
