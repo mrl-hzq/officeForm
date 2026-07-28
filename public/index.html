@@ -186,23 +186,6 @@
                   </label>
                 </div>
 
-                <label class="half-day-label" id="halfDayLabel" style="display:none">
-                  <input id="halfDayCheckbox" name="halfDay" type="checkbox">
-                  <span>Half day (0.5 day)</span>
-                </label>
-
-                <div id="halfDayPeriodGroup" class="half-day-period-group" style="display:none">
-                  <span class="period-label">Period</span>
-                  <label class="period-option">
-                    <input type="radio" name="halfDayPeriod" value="AM" checked>
-                    <span>AM</span>
-                  </label>
-                  <label class="period-option">
-                    <input type="radio" name="halfDayPeriod" value="PM">
-                    <span>PM</span>
-                  </label>
-                </div>
-
                 <fieldset class="leave-type-fieldset">
                   <legend>Leave type</legend>
                   <div class="leave-type-grid">
@@ -243,15 +226,29 @@
                 </label>
 
                 <div class="calculation-strip">
-                  <div>
+                  <div class="calc-card calc-duration">
                     <span>Duration</span>
                     <strong id="durationValue">1 day</strong>
+                    <label class="half-day-label" id="halfDayLabel" style="display:none">
+                      <input id="halfDayCheckbox" name="halfDay" type="checkbox">
+                      <span>Half day (0.5 day)</span>
+                    </label>
+                    <div id="halfDayPeriodGroup" class="half-day-period-group" style="display:none">
+                      <label class="period-option">
+                        <input type="radio" name="halfDayPeriod" value="AM" checked>
+                        <span>AM</span>
+                      </label>
+                      <label class="period-option">
+                        <input type="radio" name="halfDayPeriod" value="PM">
+                        <span>PM</span>
+                      </label>
+                    </div>
                   </div>
-                  <div>
+                  <div class="calc-card">
                     <span>Leave type</span>
                     <strong id="selectedLeaveTypeValue">Annual Leave</strong>
                   </div>
-                  <div>
+                  <div class="calc-card">
                     <span id="balanceAfterLabel">AL balance after</span>
                     <strong id="balanceAfterValue"></strong>
                   </div>

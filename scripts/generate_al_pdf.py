@@ -99,11 +99,12 @@ def generate_al_pdf(
     _set_merged_value(actions, "L21", house_tel)
     _set_merged_value(actions, "AF21", other_tel)
 
-    _set_merged_value(actions, "L23", duration_days)
+    duration_display = (
+        f"{duration_days} ({half_day_period})" if half_day_period else duration_days
+    )
+    _set_merged_value(actions, "L23", duration_display)
     _set_merged_date_text(actions, "R24", start_date)
     _set_merged_date_text(actions, "AG24", end_date)
-    if half_day_period:
-        _set_merged_value(actions, "L24", half_day_period)
 
     reason_cells = {
         "annual": "Z28",

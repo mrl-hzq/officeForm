@@ -216,6 +216,31 @@ label {
   gap: 10px;
 }
 
+.al-form {
+  display: grid;
+  gap: 18px;
+}
+
+.al-form > label,
+.date-grid label {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.al-form > label input,
+.al-form > label textarea,
+.date-grid label input {
+  color: var(--text);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
 .login-row button,
 .al-form button,
 .kpi-form button,
@@ -597,18 +622,19 @@ label {
 }
 
 .profile-grid div,
-.calculation-strip div {
+.calc-card {
   display: grid;
   gap: 6px;
+  align-content: start;
   min-height: 76px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface-strong);
-  padding: 12px;
+  padding: 12px 14px;
 }
 
 .profile-grid span,
-.calculation-strip span {
+.calc-card span {
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 800;
@@ -616,8 +642,13 @@ label {
 }
 
 .profile-grid strong,
-.calculation-strip strong {
+.calc-card strong {
   overflow-wrap: anywhere;
+  font-size: 1.02rem;
+}
+
+.calc-duration {
+  gap: 8px;
 }
 
 .half-day-label {
@@ -625,11 +656,27 @@ label {
   align-items: center;
   gap: 8px;
   min-height: 0;
-  padding: 4px 0;
+  margin-top: 2px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--control-bg);
   color: var(--text);
-  font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: normal;
   cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.half-day-label:hover {
+  border-color: var(--accent);
+}
+
+.half-day-label:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .half-day-label input[type="checkbox"] {
@@ -643,31 +690,39 @@ label {
 
 .half-day-period-group {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 4px 0;
-}
-
-.half-day-period-group .period-label {
-  color: var(--muted);
-  font-size: 0.9rem;
-  font-weight: 700;
-  text-transform: uppercase;
+  align-items: stretch;
+  gap: 8px;
 }
 
 .period-option {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  flex: 1;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--control-bg);
   cursor: pointer;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: normal;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.period-option:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
   color: var(--text);
-  font-size: 0.9rem;
-  font-weight: 600;
 }
 
 .period-option input[type="radio"] {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   min-height: 0;
   margin: 0;
   accent-color: var(--accent);
