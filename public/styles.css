@@ -224,6 +224,7 @@ label {
 .remove-entitlement-label {
   display: flex;
   align-items: center;
+  flex-wrap: nowrap;
   gap: 8px;
   min-height: 0;
   padding: 8px 10px;
@@ -233,8 +234,13 @@ label {
   color: var(--text);
   font-size: 0.82rem;
   font-weight: 700;
+  white-space: nowrap;
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.remove-entitlement-label input[type="checkbox"] {
+  flex-shrink: 0;
 }
 
 .remove-entitlement-label:hover {
