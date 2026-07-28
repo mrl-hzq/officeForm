@@ -6,3 +6,6 @@ python-dotenv==1.0.1
 cryptography
 pywin32
 pypdf
+gspread==6.1.2
+google-auth==2.31.0
+google-auth-oauthlib==1.2.1

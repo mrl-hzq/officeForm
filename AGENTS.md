@@ -200,6 +200,25 @@ Native Windows PDF generation needs LibreOffice available to the bridge path for
 - Do not delete `generated/` unless the user explicitly wants generated PDFs/workbooks cleared.
 - Be careful with `.env`; it contains local DB settings.
 
+## Google Sheets Calendar Sync
+
+- On a successful AL/EL/MC submission, the backend best-effort appends a labeled line into the worker's day cell of the shared Google Spreadsheet calendar tab (`2026` by default). KPI, OT, and Expense Claim are not synced.
+- Sync is opt-in via `GOOGLE_SHEETS_ENABLED=1` plus `GOOGLE_CREDENTIALS_PATH`, `GOOGLE_SHEET_ID`, `GOOGLE_SHEET_TAB` in `.env`. With the flag off, all sync paths short-circuit and the app behaves as before.
+- Credentials are a Google Cloud **service account** JSON key. The target spreadsheet must be shared with the service-account email as Editor. The `secrets/` folder is gitignored.
+- Labels: `Haziq (AL)` / `Haziq (AL AM)` / `Haziq (AL PM)` / `Haziq (EL)` / `Haziq (EL AM)` / `Haziq (EL PM)` / `Haziq (MC)`. The display name uses the same rule as the in-app shared calendar (`app/google_sheets.py::calendar_display_name`), ported from `public/app.js::getCalendarDisplayName`.
+- The `2026` tab layout assumes one block per month: row N = month title, row N+1 = weekday headers (Mon=A..Sun=G), then repeating 2-row weeks (numbers row, content row). The helper auto-locates each month block by searching column A for `"<MonthName> <Year>"`, so no manual cell map is required. Missing month blocks are skipped with a warning.
+- Multi-day AL/EL writes one line into each covered day cell. MC is single-day by default but uses the same per-day loop.
+- Sync is idempotent: before writing, the cell's existing lines are read and compared; an exact full-line match of the planned label causes a skip (no duplicate). Legacy hand-entered rows never match the new `<Name> (<Form>)` format and are left untouched.
+- The `submissions` table has a `sheets_synced_at DATETIME NULL` column. The live hook sets it to `NOW()` only after at least one cell was written. Existing live-DB installs need a one-time `ALTER TABLE submissions ADD COLUMN sheets_synced_at DATETIME NULL;` (already in `db/init.sql` for fresh installs).
+- Backlog / retrofill: `python scripts/sync_google_sheets_backlog.py` selects all `sheets_synced_at IS NULL` rows for AL/EL/MC and syncs them, marking each row on success. Flags: `--dry-run`, `--worker-id <id>`, `--since YYYY-MM-DD`. Re-runnable; combined with cell-level dedup it cannot double-write.
+- Per-worker last-synced view:
+  ```sql
+  SELECT worker_id, MAX(sheets_synced_at) AS last_synced
+  FROM submissions WHERE sheets_synced_at IS NOT NULL
+  GROUP BY worker_id ORDER BY last_synced DESC;
+  ```
+- Failure isolation: any sync error is logged via `current_app.logger.warning` and never blocks the form's `201` response. Unsynced rows are picked up by the next backlog run.
+
 ## Recent Direction
 
 The product goal is an internal collaborative office form system:

@@ -25,12 +25,18 @@ services:
 
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-secret-change-in-production}
       - AUTH_SHARED_PASSWORD=${AUTH_SHARED_PASSWORD:-abcd1234}
+      - GOOGLE_SHEETS_ENABLED=${GOOGLE_SHEETS_ENABLED:-0}
+      - GOOGLE_CREDENTIALS_PATH=/app/secrets/officeform-503804-a6af5cb4b3a4.json
+      - GOOGLE_SHEET_ID=${GOOGLE_SHEET_ID:-1A1g37tUffmaVuj8PIcGU1-V0iq5fYpk3dVQVcXlcL4U}
+      - GOOGLE_SHEET_TAB=${GOOGLE_SHEET_TAB:-2026}
     ports:
       - "3000:3000"
     volumes:
-      - ./generated:/app/generated
-      - ./formOri:/app/formOri:ro
-      - ./others:/app/others
+      # - ./generated:/app/generated
+      # - ./formOri:/app/formOri:ro
+      # - ./others:/app/others
+      # - ./secrets:/app/secrets:ro
+      - ./:/app
 
   db:
     image: mysql:8.4

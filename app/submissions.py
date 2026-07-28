@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from flask import Blueprint, jsonify, request, g, current_app
@@ -34,8 +34,81 @@ from .utils import (
     LEAVE_TYPES,
 )
 from . import pdf_service
+from . import google_sheets
 
 bp = Blueprint("submissions", __name__)
+
+
+def _sheets_label(form_type: str, display_name: str, is_half_day: bool, half_day_period: str | None) -> str:
+    if form_type == "MC":
+        return f"{display_name} (MC)"
+    code = "AL" if form_type == "AL" else "EL"
+    if is_half_day:
+        period = (half_day_period or "").upper() or "AM"
+        return f"{display_name} ({code} {period})"
+    return f"{display_name} ({code})"
+
+
+def _build_sheets_label(row: dict) -> str | None:
+    """Reconstruct the calendar label for a submission row. Returns None for non-calendar forms."""
+    form_type = row.get("form_type")
+    if form_type not in ("AL", "EL", "MC"):
+        return None
+    snapshot = json.loads(row["worker_snapshot"]) if isinstance(row.get("worker_snapshot"), str) else (row.get("worker_snapshot") or {})
+    display_name = google_sheets.calendar_display_name(snapshot.get("name"), row.get("worker_id"))
+    return _sheets_label(form_type, display_name, bool(row.get("is_half_day")), row.get("half_day_period"))
+
+
+def _submission_date_range(row: dict):
+    start_date = row.get("start_date")
+    end_date = row.get("end_date")
+    if not start_date or not end_date:
+        return None
+    start_d = start_date if isinstance(start_date, date) else datetime.fromisoformat(str(start_date)).date()
+    end_d = end_date if isinstance(end_date, date) else datetime.fromisoformat(str(end_date)).date()
+    return start_d, end_d
+
+
+def _sync_submission_to_sheets(row: dict) -> None:
+    """Best-effort Google Sheets calendar sync for AL/EL/MC. Never raises."""
+    cfg = current_app.config
+    if not cfg.get("GOOGLE_SHEETS_ENABLED"):
+        return
+    label = _build_sheets_label(row)
+    if not label:
+        return
+    rng = _submission_date_range(row)
+    if not rng:
+        return
+    start_d, end_d = rng
+    try:
+        written = False
+        for d in google_sheets.date_range(start_d, end_d):
+            if google_sheets.append_calendar_entry(d, label):
+                written = True
+        if written:
+            execute("UPDATE submissions SET sheets_synced_at = %s WHERE id = %s", (datetime.now(timezone.utc).replace(microsecond=0), row["id"]))
+    except Exception as exc:
+        current_app.logger.warning("Google Sheets sync failed for submission %s: %s", row.get("id"), exc)
+
+
+def _remove_submission_from_sheets(row: dict) -> None:
+    """Best-effort removal of a submission's calendar lines on delete. Never raises."""
+    cfg = current_app.config
+    if not cfg.get("GOOGLE_SHEETS_ENABLED"):
+        return
+    label = _build_sheets_label(row)
+    if not label:
+        return
+    rng = _submission_date_range(row)
+    if not rng:
+        return
+    start_d, end_d = rng
+    try:
+        for d in google_sheets.date_range(start_d, end_d):
+            google_sheets.remove_calendar_line(d, label)
+    except Exception as exc:
+        current_app.logger.warning("Google Sheets removal failed for submission %s: %s", row.get("id"), exc)
 
 
 def _remove_generated_file(file_name: str | None, folder: Path) -> None:
@@ -166,6 +239,7 @@ def delete_submission(submission_id: str):
         return jsonify({"error": str(exc)}), 400
 
     execute("DELETE FROM submissions WHERE id = %s", (submission_id,))
+    _remove_submission_from_sheets(row)
     return jsonify({"deleted": _row_to_submission(row)})
 
 
@@ -272,6 +346,7 @@ def create_al_submission():
     )
 
     row = query_one("SELECT * FROM submissions WHERE id = %s", (submission_id,))
+    _sync_submission_to_sheets(row)
     return jsonify({"submission": _row_to_submission(row)}), 201
 
 
@@ -354,6 +429,7 @@ def create_mc_submission():
     )
 
     row = query_one("SELECT * FROM submissions WHERE id = %s", (submission_id,))
+    _sync_submission_to_sheets(row)
     return jsonify({"submission": _row_to_submission(row)}), 201
 
 
