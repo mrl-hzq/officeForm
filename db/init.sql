@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS submissions (
     leave_summary       JSON,
     pdf_file_name       VARCHAR(255),
     workbook_file_name  VARCHAR(255),
+    sheets_synced_at    DATETIME NULL,
     created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (worker_id) REFERENCES workers(worker_id)
 );
