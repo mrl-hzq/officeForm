@@ -261,7 +261,7 @@ label {
   cursor: pointer;
 }
 
-.al-form > label,
+.al-form > label:not(.remove-entitlement-label),
 .date-grid label {
   display: grid;
   gap: 8px;
@@ -272,8 +272,8 @@ label {
   letter-spacing: 0.02em;
 }
 
-.al-form > label input,
-.al-form > label textarea,
+.al-form > label:not(.remove-entitlement-label) input,
+.al-form > label:not(.remove-entitlement-label) textarea,
 .date-grid label input {
   color: var(--text);
   font-weight: 400;
