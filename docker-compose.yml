@@ -53,10 +53,7 @@ services:
       - MYSQL_PASSWORD=${MYSQL_PASSWORD:-myadmin}
       - TZ=Asia/Kuala_Lumpur
     ports:
-      # Server
       - "3306:3306"
-      # Local
-      # - "3306:3306"
     volumes:
       - ./mysql_container_data:/var/lib/mysql
       - ./db/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro

@@ -1212,8 +1212,27 @@ label {
 .month-controls {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.sheet-link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  text-decoration: none;
+}
+
+.sheet-link-button:hover {
+  background: var(--surface-strong);
+}
+
+.sheet-icon {
+  display: block;
 }
 
 .calendar-weekdays,
