@@ -21,8 +21,9 @@ CREATE TABLE IF NOT EXISTS workers (
     annual_leave_taken       DECIMAL(5,1) DEFAULT 0,
     employment_type          ENUM('permanent','contract') DEFAULT 'permanent',
     employment_start_date    DATE,
-    employment_end_date      DATE,
-    profile_complete         BOOLEAN DEFAULT FALSE,
+employment_end_date    DATE,
+    calendar_name        VARCHAR(60) NULL,
+    profile_complete     BOOLEAN DEFAULT FALSE,
     updated_at               DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 

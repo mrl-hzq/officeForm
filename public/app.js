@@ -290,6 +290,7 @@ const elements = {
   registerMessage: document.querySelector("#registerMessage"),
   profileSetupForm: document.querySelector("#profileSetupForm"),
   setupNameInput: document.querySelector("#setupNameInput"),
+  setupCalendarNameInput: document.querySelector("#setupCalendarNameInput"),
   setupDesignationInput: document.querySelector("#setupDesignationInput"),
   setupDepartmentInput: document.querySelector("#setupDepartmentInput"),
   setupHouseTelInput: document.querySelector("#setupHouseTelInput"),
@@ -318,6 +319,7 @@ const elements = {
   profileForm: document.querySelector("#profileForm"),
   profileWorkerIdInput: document.querySelector("#profileWorkerIdInput"),
   profileNameInput: document.querySelector("#profileNameInput"),
+  profileCalendarNameInput: document.querySelector("#profileCalendarNameInput"),
   profileDesignationInput: document.querySelector("#profileDesignationInput"),
   profileDepartmentInput: document.querySelector("#profileDepartmentInput"),
   profileHouseTelInput: document.querySelector("#profileHouseTelInput"),
@@ -618,7 +620,11 @@ function getExpenseMileageRate(transportMode) {
   return expenseTransportModes[transportMode]?.rate ?? expenseTransportModes.car.rate;
 }
 
-function getCalendarDisplayName(name, workerId = "") {
+function getCalendarDisplayName(name, workerId = "", calendarName = "") {
+  const override = String(calendarName || "").trim();
+  if (override) {
+    return override;
+  }
   const parts = String(name || workerId || "").trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) {
     return "-";
@@ -1638,6 +1644,7 @@ function renderProfileForm() {
   elements.profileHouseTelInput.value = worker.houseTel || "";
   elements.profileOtherTelInput.value = worker.otherTel || "";
   elements.profileEvaluatorNameInput.value = worker.evaluatorName || "";
+  elements.profileCalendarNameInput.value = worker.calendarName || "";
   elements.profileEntitlementInput.value = worker.annualLeaveEntitlement ?? 0;
   elements.profileEmploymentTypeInput.value = worker.employmentType || "permanent";
   elements.profileEmploymentStartDateInput.value = worker.employmentStartDate || "";
@@ -1877,7 +1884,7 @@ function renderCalendar() {
           ${entries
             .map(item => {
               const type = getCalendarType(item);
-              const displayName = getCalendarDisplayName(item.workerName, item.workerId);
+              const displayName = getCalendarDisplayName(item.workerName, item.workerId, item.calendarName);
               const title = `${item.workerName || item.workerId} - ${calendarTypeLabels[type]}`;
               const tag = item.pdfUrl ? "a" : "span";
               const hrefAttr = item.pdfUrl
@@ -1991,6 +1998,7 @@ elements.profileSetupForm.addEventListener("submit", async event => {
     standardizeFieldGroup(profileSetupStandardFields);
     const payload = {
       name: elements.setupNameInput.value,
+      calendarName: elements.setupCalendarNameInput.value,
       designation: elements.setupDesignationInput.value,
       department: elements.setupDepartmentInput.value,
       houseTel: elements.setupHouseTelInput.value,
@@ -2156,7 +2164,7 @@ elements.alForm.addEventListener("submit", async event => {
   }
 
   elements.generateButton.disabled = true;
-  setMessage(elements.formMessage, "Generating PDF...");
+  setMessage(elements.formMessage, "Generating PDF and syncing spreadsheet...");
 
   try {
     const payload = {
@@ -2214,7 +2222,7 @@ elements.mcForm.addEventListener("submit", async event => {
   }
 
   elements.mcGenerateButton.disabled = true;
-  setMessage(elements.mcFormMessage, "Generating PDF...");
+  setMessage(elements.mcFormMessage, "Generating PDF and syncing spreadsheet...");
 
   try {
     const payload = {
@@ -2471,12 +2479,13 @@ elements.profileForm.addEventListener("submit", async event => {
   }
 
   elements.saveProfileButton.disabled = true;
-  setMessage(elements.profileMessage, "Saving profile...");
+  setMessage(elements.profileMessage, "Saving profile and syncing spreadsheet...");
 
   try {
     standardizeFieldGroup(profileEditStandardFields);
     const payload = {
       name: elements.profileNameInput.value,
+      calendarName: elements.profileCalendarNameInput.value,
       designation: elements.profileDesignationInput.value,
       department: elements.profileDepartmentInput.value,
       houseTel: elements.profileHouseTelInput.value,
@@ -2511,13 +2520,24 @@ elements.historyRows.addEventListener("click", async event => {
   }
 
   const submissionId = button.dataset.deleteSubmission;
-  const confirmed = window.confirm("Delete this request and remove its generated files?");
+  const submission = state.submissions.find(item => item.id === submissionId);
+  const isCalendarForm = submission && ["AL", "EL", "MC"].includes(submission.formType);
+  const confirmMessage = isCalendarForm
+    ? "This will delete the request, remove its generated files, and remove its entry from the shared spreadsheet calendar."
+    : "This will delete the request and remove its generated files.";
+  const confirmed = await confirmDialog({
+    title: "Delete request?",
+    message: confirmMessage,
+    confirmLabel: "Delete",
+    cancelLabel: "Cancel",
+    danger: true
+  });
   if (!confirmed) {
     return;
   }
 
   button.disabled = true;
-  setMessage(elements.historyMessage, "Deleting request...");
+  setMessage(elements.historyMessage, "Deleting request and updating spreadsheet...");
 
   try {
     await api(`/api/submissions/${encodeURIComponent(submissionId)}`, {
@@ -2821,3 +2841,61 @@ renderExpenseRows();
 renderOtRows();
 renderOtherForms();
 renderUpcomingHolidays();
+
+// ----- Reusable in-app confirm modal (replaces window.confirm) -----
+function confirmDialog({ title = "Confirm", message = "", confirmLabel = "Confirm", cancelLabel = "Cancel", danger = false } = {}) {
+  return new Promise(resolve => {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+
+    const panel = document.createElement("div");
+    panel.className = `modal-panel${danger ? " modal-danger" : ""}`;
+
+    const heading = document.createElement("h2");
+    heading.textContent = title;
+    panel.appendChild(heading);
+
+    if (message) {
+      const body = document.createElement("p");
+      body.className = "modal-message";
+      body.textContent = message;
+      panel.appendChild(body);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "modal-actions";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "modal-cancel";
+    cancelBtn.textContent = cancelLabel;
+    const confirmBtn = document.createElement("button");
+    confirmBtn.type = "button";
+    confirmBtn.className = danger ? "danger-button" : "modal-confirm";
+    confirmBtn.textContent = confirmLabel;
+    actions.appendChild(cancelBtn);
+    actions.appendChild(confirmBtn);
+    panel.appendChild(actions);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+
+    let settled = false;
+    const close = result => {
+      if (settled) return;
+      settled = true;
+      overlay.remove();
+      document.removeEventListener("keydown", onKey);
+      resolve(result);
+    };
+    const onKey = event => {
+      if (event.key === "Escape") close(false);
+      else if (event.key === "Enter") close(true);
+    };
+    cancelBtn.addEventListener("click", () => close(false));
+    confirmBtn.addEventListener("click", () => close(true));
+    overlay.addEventListener("click", event => { if (event.target === overlay) close(false); });
+    document.addEventListener("keydown", onKey);
+    setTimeout(() => confirmBtn.focus(), 0);
+  });
+}

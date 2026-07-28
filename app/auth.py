@@ -185,6 +185,7 @@ def _serialize_worker(row: dict | None) -> dict:
         "houseTel": row.get("house_tel"),
         "otherTel": row.get("other_tel"),
         "evaluatorName": row.get("evaluator_name"),
+        "calendarName": row.get("calendar_name"),
         "annualLeaveEntitlement": float(row.get("annual_leave_entitlement") or 0),
         "annualLeaveTaken": float(row.get("annual_leave_taken") or 0),
         "employmentType": row.get("employment_type"),

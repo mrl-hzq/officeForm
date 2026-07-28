@@ -10,27 +10,31 @@ services:
       - APP_PORT=3000
       # Choose exactly one complete database target block.
       # Option A: local MySQL service on the Windows host (active)
-      - DB_SERVER=host.docker.internal
-      - DB_PORT=3306
-      - DB_SCHEMA=officeform
-      - DB_USER=root
-      - DB_PASSWORD=root
+      # - DB_SERVER=host.docker.internal
+      # - DB_PORT=3306
+      # - DB_SCHEMA=officeform
+      # - DB_USER=root
+      # - DB_PASSWORD=root
 
       # Option B: MySQL container in this Compose stack
-#      - DB_SERVER=db
-#      - DB_PORT=3306
-#      - DB_SCHEMA=officeform
-#      - DB_USER=officeform
-#      - DB_PASSWORD=officeform_pass
+      - DB_SERVER=db
+      - DB_PORT=3306
+      - DB_SCHEMA=officeform
+      - DB_USER=officeform
+      - DB_PASSWORD=myadmin
 
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-secret-change-in-production}
+      # - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-secret-change-in-production}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-officeformterplaingsecret}
       - AUTH_SHARED_PASSWORD=${AUTH_SHARED_PASSWORD:-abcd1234}
       - GOOGLE_SHEETS_ENABLED=${GOOGLE_SHEETS_ENABLED:-0}
       - GOOGLE_CREDENTIALS_PATH=/app/secrets/officeform-503804-a6af5cb4b3a4.json
       - GOOGLE_SHEET_ID=${GOOGLE_SHEET_ID:-1A1g37tUffmaVuj8PIcGU1-V0iq5fYpk3dVQVcXlcL4U}
       - GOOGLE_SHEET_TAB=${GOOGLE_SHEET_TAB:-2026}
     ports:
-      - "3000:3000"
+      # Server
+      - "80:3000"
+      # Local
+      # - "3000:3000"
     volumes:
       # - ./generated:/app/generated
       # - ./formOri:/app/formOri:ro
@@ -46,12 +50,15 @@ services:
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-root}
       - MYSQL_DATABASE=${MYSQL_DATABASE:-officeform}
       - MYSQL_USER=${MYSQL_USER:-officeform}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-officeform_pass}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-myadmin}
       - TZ=Asia/Kuala_Lumpur
     ports:
-      - "3307:3306"
+      # Server
+      - "3306:3306"
+      # Local
+      # - "3306:3306"
     volumes:
-      - mysql_container_data:/var/lib/mysql
+      - ./mysql_container_data:/var/lib/mysql
       - ./db/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]

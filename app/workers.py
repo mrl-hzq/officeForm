@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date, datetime
+
 from flask import Blueprint, jsonify, request, g, current_app
 
 from .auth import require_auth, _serialize_worker
@@ -84,6 +86,10 @@ def update_worker_profile(worker_id: str):
     house_tel = clean_profile_value(body.get("houseTel", row.get("house_tel")))
     other_tel = clean_profile_value(body.get("otherTel", row.get("other_tel")))
     evaluator_name = standardize_profile_text(body.get("evaluatorName", row.get("evaluator_name")), is_name=True)
+    if "calendarName" in body:
+        calendar_name = clean_profile_value(body.get("calendarName")) or None
+    else:
+        calendar_name = row.get("calendar_name")
 
     if "annualLeaveEntitlement" in body:
         try:
@@ -121,11 +127,47 @@ def update_worker_profile(worker_id: str):
             house_tel = %s, other_tel = %s, evaluator_name = %s,
             annual_leave_entitlement = %s, employment_type = %s,
             employment_start_date = %s, employment_end_date = %s,
-            profile_complete = %s
+            calendar_name = %s, profile_complete = %s
            WHERE worker_id = %s""",
         (name, designation, department, house_tel, other_tel, evaluator_name,
-         entitlement, employment_type, emp_start, emp_end, profile_complete, normalized),
+         entitlement, employment_type, emp_start, emp_end, calendar_name, profile_complete, normalized),
     )
+
+    _rename_sheets_calendar_lines(row, normalized, name, calendar_name)
 
     worker = _get_worker_enriched(normalized)
     return jsonify({"worker": worker})
+
+
+def _rename_sheets_calendar_lines(old_row: dict, worker_id: str, new_name: str, new_calendar_name: str | None) -> None:
+    """If the calendar display name changed, rename existing AL/EL/MC sheet lines for this worker.
+
+    Best-effort: never raises, never blocks the profile save.
+    """
+    if not current_app.config.get("GOOGLE_SHEETS_ENABLED"):
+        return
+    try:
+        from .google_sheets import calendar_display_name, build_calendar_label, replace_calendar_line, date_range
+        old_display = calendar_display_name(old_row.get("name"), worker_id, old_row.get("calendar_name"))
+        new_display = calendar_display_name(new_name, worker_id, new_calendar_name)
+        if old_display == new_display:
+            return
+        subs = query(
+            "SELECT form_type, start_date, end_date, is_half_day, half_day_period "
+            "FROM submissions WHERE worker_id = %s AND form_type IN ('AL','EL','MC') "
+            "ORDER BY start_date ASC",
+            (worker_id,),
+        )
+        for s in subs:
+            is_half = bool(s.get("is_half_day"))
+            period = s.get("half_day_period")
+            old_label = build_calendar_label(s["form_type"], old_display, is_half, period)
+            new_label = build_calendar_label(s["form_type"], new_display, is_half, period)
+            if old_label == new_label:
+                continue
+            start_d = s["start_date"] if isinstance(s["start_date"], date) else datetime.fromisoformat(str(s["start_date"])).date()
+            end_d = s["end_date"] if isinstance(s["end_date"], date) else datetime.fromisoformat(str(s["end_date"])).date()
+            for d in date_range(start_d, end_d):
+                replace_calendar_line(d, old_label, new_label)
+    except Exception as exc:
+        current_app.logger.warning("Google Sheets rename failed for %s: %s", worker_id, exc)
