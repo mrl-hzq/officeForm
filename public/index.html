@@ -256,7 +256,7 @@
 
                 <label class="remove-entitlement-label">
                   <input id="removeEntitlementCheckbox" name="removeEntitlement" type="checkbox">
-                  <span>Remove Entitlement / Kelayakan</span>
+                  <span>Remove Entitlement / Kelayakan if unsure about eligibility</span>
                 </label>
 
                 <button id="generateButton" type="submit">Generate Leave PDF</button>
@@ -467,6 +467,10 @@
                     <input id="expenseMonthInput" name="claimMonth" type="month" required>
                   </label>
                   <label>
+                    Claim month end (optional)
+                    <input id="expenseMonthEndInput" name="claimMonthEnd" type="month">
+                  </label>
+                  <label>
                     Site
                     <input id="expenseSiteInput" name="site" type="text">
                   </label>
@@ -538,6 +542,10 @@
                   <label>
                     Claim month
                     <input id="otMonthInput" name="claimMonth" type="month" required>
+                  </label>
+                  <label>
+                    Claim month end (optional)
+                    <input id="otMonthEndInput" name="claimMonthEnd" type="month">
                   </label>
                 </div>
 

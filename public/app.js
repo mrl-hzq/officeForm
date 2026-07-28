@@ -376,6 +376,7 @@ const elements = {
   kpiFormMessage: document.querySelector("#kpiFormMessage"),
   expenseForm: document.querySelector("#expenseForm"),
   expenseMonthInput: document.querySelector("#expenseMonthInput"),
+  expenseMonthEndInput: document.querySelector("#expenseMonthEndInput"),
   expenseSiteInput: document.querySelector("#expenseSiteInput"),
   expenseSupervisorInput: document.querySelector("#expenseSupervisorInput"),
   expenseAdvancesInput: document.querySelector("#expenseAdvancesInput"),
@@ -389,6 +390,7 @@ const elements = {
   expenseFormMessage: document.querySelector("#expenseFormMessage"),
   otForm: document.querySelector("#otForm"),
   otMonthInput: document.querySelector("#otMonthInput"),
+  otMonthEndInput: document.querySelector("#otMonthEndInput"),
   otLinesBody: document.querySelector("#otLinesBody"),
   otAddLineButton: document.querySelector("#otAddLineButton"),
   otRemoveLineButton: document.querySelector("#otRemoveLineButton"),
@@ -477,6 +479,19 @@ function monthInputValue(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   return `${year}-${month}`;
+}
+
+function isWithinClaimMonthRange(itemDate, claimMonth, claimMonthEnd) {
+  if (!itemDate || !claimMonth) {
+    return false;
+  }
+  const start = claimMonth;
+  const end = claimMonthEnd || claimMonth;
+  if (end < start) {
+    return false;
+  }
+  const itemMonth = itemDate.slice(0, 7);
+  return itemMonth >= start && itemMonth <= end;
 }
 
 function formatMonthLabel(value) {
@@ -1234,6 +1249,7 @@ function calculateExpenses() {
 
   return {
     claimMonth: elements.expenseMonthInput.value,
+    claimMonthEnd: elements.expenseMonthEndInput.value || null,
     site: elements.expenseSiteInput.value.trim(),
     supervisorName: elements.expenseSupervisorInput.value.trim(),
     advances,
@@ -1414,6 +1430,7 @@ function calculateOt() {
 
   return {
     claimMonth: elements.otMonthInput.value,
+    claimMonthEnd: elements.otMonthEndInput.value || null,
     items
   };
 }
@@ -1547,7 +1564,9 @@ function renderWorker(options = {}) {
     elements.mcEndDateInput.value = today;
     elements.kpiMonthInput.value = monthInputValue();
     elements.expenseMonthInput.value = monthInputValue();
+    elements.expenseMonthEndInput.value = "";
     elements.otMonthInput.value = monthInputValue();
+    elements.otMonthEndInput.value = "";
   }
   calculateAl();
   toggleHalfDayVisibility();
@@ -2307,9 +2326,14 @@ elements.expenseForm.addEventListener("submit", async event => {
     return;
   }
 
-  const outsideMonth = calculation.items.find(item => !item.date.startsWith(calculation.claimMonth));
+  if (calculation.claimMonthEnd && calculation.claimMonthEnd < calculation.claimMonth) {
+    setMessage(elements.expenseFormMessage, "Claim month end cannot be before the start month.", "error");
+    return;
+  }
+
+  const outsideMonth = calculation.items.find(item => !isWithinClaimMonthRange(item.date, calculation.claimMonth, calculation.claimMonthEnd));
   if (outsideMonth) {
-    setMessage(elements.expenseFormMessage, "Expense dates must match the claim month.", "error");
+    setMessage(elements.expenseFormMessage, "Expense dates must fall within the claim month range.", "error");
     return;
   }
 
@@ -2366,9 +2390,14 @@ elements.otForm.addEventListener("submit", async event => {
     return;
   }
 
-  const outsideMonth = calculation.items.find(item => !item.date.startsWith(calculation.claimMonth));
+  if (calculation.claimMonthEnd && calculation.claimMonthEnd < calculation.claimMonth) {
+    setMessage(elements.otFormMessage, "Claim month end cannot be before the start month.", "error");
+    return;
+  }
+
+  const outsideMonth = calculation.items.find(item => !isWithinClaimMonthRange(item.date, calculation.claimMonth, calculation.claimMonthEnd));
   if (outsideMonth) {
-    setMessage(elements.otFormMessage, "Overtime dates must match the claim month.", "error");
+    setMessage(elements.otFormMessage, "Overtime dates must fall within the claim month range.", "error");
     return;
   }
 

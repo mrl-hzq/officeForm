@@ -22,6 +22,7 @@ from .utils import (
     clean_profile_value,
     get_leave_summary,
     format_kpi_month_label,
+    format_month_range_label,
     parse_kpi_scores,
     parse_kpi_comments,
     parse_kpi_options,
@@ -477,18 +478,22 @@ def create_ot_submission():
 
     try:
         month_start = parse_year_month(body.get("claimMonth"), "claimMonth")
+        month_end_start = parse_year_month(body.get("claimMonthEnd"), "claimMonthEnd") if body.get("claimMonthEnd") else None
         items = parse_ot_items(body)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
-    month_end = end_of_month(month_start)
+    if month_end_start and month_end_start < month_start:
+        return jsonify({"error": "Claim month end cannot be before the start month."}), 400
+
+    range_end = end_of_month(month_end_start) if month_end_start else end_of_month(month_start)
     for item in items:
         item_date = parse_optional_date(item["date"])
-        if not item_date or item_date < month_start or item_date > month_end:
-            return jsonify({"error": "Overtime item dates must be within the claim month."}), 400
+        if not item_date or item_date < month_start or item_date > range_end:
+            return jsonify({"error": "Overtime item dates must be within the claim month range."}), 400
 
     month_key = month_start.strftime("%Y-%m")
-    month_label = month_start.strftime("%B")
+    month_label = format_month_range_label(month_start, month_end_start)
     application_iso = to_iso_date(datetime.now())
     created_at = datetime.now(timezone.utc).replace(microsecond=0)
     submission_id = f"OT-{uuid.uuid4().hex[:8].upper()}"
@@ -520,6 +525,7 @@ def create_ot_submission():
     total_hours = round(sum(float(item["hours"]) for item in items), 2)
     ot_data = {
         "claimMonth": month_key,
+        "claimMonthEnd": month_end_start.strftime("%Y-%m") if month_end_start else None,
         "totalHours": total_hours,
         "hoursByRate": hours_by_rate,
         "items": items,
@@ -559,16 +565,20 @@ def create_expense_submission():
 
     try:
         month_start = parse_year_month(body.get("claimMonth"), "claimMonth")
+        month_end_start = parse_year_month(body.get("claimMonthEnd"), "claimMonthEnd") if body.get("claimMonthEnd") else None
         items = parse_expense_items(body)
         advances = parse_optional_non_negative_number(body.get("advances"), "advances")
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
-    month_end = end_of_month(month_start)
+    if month_end_start and month_end_start < month_start:
+        return jsonify({"error": "Claim month end cannot be before the start month."}), 400
+
+    range_end = end_of_month(month_end_start) if month_end_start else end_of_month(month_start)
     for item in items:
         item_date = parse_optional_date(item["date"])
-        if not item_date or item_date < month_start or item_date > month_end:
-            return jsonify({"error": "Expense item dates must be within the claim month."}), 400
+        if not item_date or item_date < month_start or item_date > range_end:
+            return jsonify({"error": "Expense item dates must be within the claim month range."}), 400
 
     supervisor_name = clean_profile_value(body.get("supervisorName") or worker.get("evaluatorName"))
     if not supervisor_name:
@@ -576,7 +586,7 @@ def create_expense_submission():
 
     site = clean_profile_value(body.get("site"))
     month_key = month_start.strftime("%Y-%m")
-    month_label = month_start.strftime("%B").upper()
+    month_label = format_month_range_label(month_start, month_end_start, upper=True)
     application_iso = to_iso_date(datetime.now())
     created_at = datetime.now(timezone.utc).replace(microsecond=0)
     submission_id = f"EXP-{uuid.uuid4().hex[:8].upper()}"
@@ -607,6 +617,7 @@ def create_expense_submission():
     total_amount = round(sum(float(item.get("total") or 0) for item in items), 2)
     expense_data = {
         "claimMonth": month_key,
+        "claimMonthEnd": month_end_start.strftime("%Y-%m") if month_end_start else None,
         "site": site,
         "supervisorName": supervisor_name,
         "advances": advances,

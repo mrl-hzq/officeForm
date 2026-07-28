@@ -357,6 +357,16 @@ def format_kpi_month_label(month_start: date) -> str:
     return month_start.strftime("%B %Y").upper()
 
 
+def format_month_range_label(month_start: date, month_end: date | None = None, *, upper: bool = False) -> str:
+    if month_end is None or month_end == month_start:
+        label = month_start.strftime("%B")
+    elif month_start.year == month_end.year:
+        label = f"{month_start.strftime('%B')} - {month_end.strftime('%B')}"
+    else:
+        label = f"{month_start.strftime('%B %Y')} - {month_end.strftime('%B %Y')}"
+    return label.upper() if upper else label
+
+
 def _ot_hours(time_from: str, time_to: str) -> float:
     start_minutes = int(time_from[:2]) * 60 + int(time_from[2:])
     end_minutes = int(time_to[:2]) * 60 + int(time_to[2:])

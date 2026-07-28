@@ -111,8 +111,10 @@ def _regenerate_pdf(filename: str) -> None:
             )
         elif form_type == "EXP":
             ed = _loadj(row.get("kpi_data"))
-            from .utils import parse_year_month
-            ml = parse_year_month(ed.get("claimMonth", ""), "claimMonth").strftime("%B").upper() if ed.get("claimMonth") else ""
+            from .utils import parse_year_month, format_month_range_label
+            ms = parse_year_month(ed.get("claimMonth", ""), "claimMonth") if ed.get("claimMonth") else None
+            me = parse_year_month(ed.get("claimMonthEnd", ""), "claimMonthEnd") if ed.get("claimMonthEnd") else None
+            ml = format_month_range_label(ms, me, upper=True) if ms else ""
             pdf_service.generate_expense(
                 template_path=FORM_ORI_DIR / "expenses claim form baru.xlsx",
                 workbook_path=workbook_path,
@@ -126,8 +128,10 @@ def _regenerate_pdf(filename: str) -> None:
             )
         elif form_type == "OT":
             od = _loadj(row.get("kpi_data"))
-            from .utils import parse_year_month
-            ml = parse_year_month(od.get("claimMonth", ""), "claimMonth").strftime("%B") if od.get("claimMonth") else ""
+            from .utils import parse_year_month, format_month_range_label
+            ms = parse_year_month(od.get("claimMonth", ""), "claimMonth") if od.get("claimMonth") else None
+            me = parse_year_month(od.get("claimMonthEnd", ""), "claimMonthEnd") if od.get("claimMonthEnd") else None
+            ml = format_month_range_label(ms, me) if ms else ""
             pdf_service.generate_ot(
                 template_path=FORM_ORI_DIR / "OT Form latest.xls",
                 workbook_path=workbook_path,
