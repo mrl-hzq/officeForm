@@ -18,9 +18,25 @@ _MONTH_NAMES = [
 _CONNECTORS = {"bin", "binti", "bt", "a/l", "a/p"}
 
 
-def calendar_display_name(name: str | None, worker_id: str | None = "") -> str:
-    """Port of public/app.js getCalendarDisplayName: token before bin/binti connector, else first token."""
-    parts = [p for p in (str(name or worker_id or "")).strip().split() if p]
+def build_calendar_label(form_type: str, display_name: str, is_half_day: bool, half_day_period: str | None) -> str:
+    """Build the '<Name> (<Form>)' line written into calendar cells."""
+    if form_type == "MC":
+        return f"{display_name} (MC)"
+    code = "AL" if form_type == "AL" else "EL"
+    if is_half_day:
+        period = (half_day_period or "").upper() or "AM"
+        return f"{display_name} ({code} {period})"
+    return f"{display_name} ({code})"
+
+
+def calendar_display_name(name: str | None, worker_id: str | None = "", calendar_name: str | None = None) -> str:
+    """If `calendar_name` is set, use it. Otherwise port of public/app.js getCalendarDisplayName:
+    token before bin/binti connector, else first token."""
+    if calendar_name:
+        cleaned = str(calendar_name).strip()
+        if cleaned:
+            return cleaned
+    parts = [p for p in str(name or worker_id or "").strip().split() if p]
     if not parts:
         return "-"
     for i, token in enumerate(parts):
@@ -165,3 +181,41 @@ def date_range(start: date, end: date):
     while d <= end:
         yield d
         d += timedelta(days=1)
+
+
+def replace_calendar_line(target_date: date, old_label: str, new_label: str) -> bool:
+    """Rename an exact full-line match from `old_label` to `new_label` in the target day cell.
+
+    Idempotent: if `old_label` is absent, no-op. Legacy hand-entered rows never match and are
+    left untouched. Returns True if a line was replaced. Never raises.
+    """
+    cfg = current_app.config
+    if not cfg.get("GOOGLE_SHEETS_ENABLED"):
+        return False
+    if not cfg.get("GOOGLE_CREDENTIALS_PATH") or not cfg.get("GOOGLE_SHEET_ID"):
+        logger.warning("Google Sheets sync skipped: credentials or sheet id not configured")
+        return False
+
+    try:
+        gc = _client()
+        sh = gc.open_by_key(cfg["GOOGLE_SHEET_ID"]).worksheet(cfg["GOOGLE_SHEET_TAB"])
+        a1 = _locate_target_cell(sh, target_date)
+        if not a1:
+            return False
+        existing = _read_cell(sh, a1)
+        lines = existing.split("\n")
+        found = False
+        new_lines = []
+        for ln in lines:
+            if ln.strip() == old_label:
+                new_lines.append(new_label)
+                found = True
+            else:
+                new_lines.append(ln)
+        if not found:
+            return False
+        _write_cell(sh, a1, "\n".join(new_lines))
+        return True
+    except Exception as exc:
+        logger.warning("Google Sheets rename failed for %s (%s -> %s): %s", target_date, old_label, new_label, exc)
+        return False

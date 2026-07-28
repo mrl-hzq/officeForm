@@ -23,17 +23,11 @@ if str(ROOT) not in sys.path:
 
 from app import create_app
 from app.db import query
-from app.google_sheets import calendar_display_name, append_calendar_entry, date_range
+from app.google_sheets import calendar_display_name, append_calendar_entry, date_range, build_calendar_label
 
 
 def _sheets_label(form_type: str, display_name: str, is_half_day: bool, half_day_period: str | None) -> str:
-    if form_type == "MC":
-        return f"{display_name} (MC)"
-    code = "AL" if form_type == "AL" else "EL"
-    if is_half_day:
-        period = (half_day_period or "").upper() or "AM"
-        return f"{display_name} ({code} {period})"
-    return f"{display_name} ({code})"
+    return build_calendar_label(form_type, display_name, is_half_day, half_day_period)
 
 
 def main() -> int:
@@ -45,17 +39,19 @@ def main() -> int:
 
     app = create_app()
     with app.app_context():
-        sql = """SELECT * FROM submissions
-                 WHERE form_type IN ('AL','EL','MC')
-                   AND sheets_synced_at IS NULL"""
+        sql = """SELECT s.*, w.calendar_name AS worker_calendar_name, w.name AS worker_name
+                 FROM submissions s
+                 LEFT JOIN workers w ON w.worker_id = s.worker_id
+                 WHERE s.form_type IN ('AL','EL','MC')
+                   AND s.sheets_synced_at IS NULL"""
         params: list = []
         if args.worker_id:
-            sql += " AND worker_id = %s"
+            sql += " AND s.worker_id = %s"
             params.append(args.worker_id)
         if args.since:
-            sql += " AND start_date >= %s"
+            sql += " AND s.start_date >= %s"
             params.append(args.since)
-        sql += " ORDER BY start_date ASC, created_at ASC"
+        sql += " ORDER BY s.start_date ASC, s.created_at ASC"
         rows = query(sql, tuple(params))
 
         print(f"Found {len(rows)} unsynced AL/EL/MC submissions.")
@@ -65,7 +61,11 @@ def main() -> int:
         for row in rows:
             snap_raw = row.get("worker_snapshot")
             snap = json.loads(snap_raw) if isinstance(snap_raw, str) else (snap_raw or {})
-            display_name = calendar_display_name(snap.get("name"), row.get("worker_id"))
+            worker_override = {
+                "name": row.get("worker_name") or snap.get("name"),
+                "calendarName": row.get("worker_calendar_name") or snap.get("calendarName"),
+            }
+            display_name = calendar_display_name(worker_override["name"], row.get("worker_id"), worker_override["calendarName"])
             label = _sheets_label(row["form_type"], display_name, bool(row.get("is_half_day")), row.get("half_day_period"))
             start_d = row["start_date"] if isinstance(row["start_date"], date) else datetime.fromisoformat(str(row["start_date"])).date()
             end_d = row["end_date"] if isinstance(row["end_date"], date) else datetime.fromisoformat(str(row["end_date"])).date()

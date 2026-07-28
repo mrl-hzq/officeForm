@@ -40,22 +40,18 @@ bp = Blueprint("submissions", __name__)
 
 
 def _sheets_label(form_type: str, display_name: str, is_half_day: bool, half_day_period: str | None) -> str:
-    if form_type == "MC":
-        return f"{display_name} (MC)"
-    code = "AL" if form_type == "AL" else "EL"
-    if is_half_day:
-        period = (half_day_period or "").upper() or "AM"
-        return f"{display_name} ({code} {period})"
-    return f"{display_name} ({code})"
+    return google_sheets.build_calendar_label(form_type, display_name, is_half_day, half_day_period)
 
 
-def _build_sheets_label(row: dict) -> str | None:
+def _build_sheets_label(row: dict, worker_override: dict | None = None) -> str | None:
     """Reconstruct the calendar label for a submission row. Returns None for non-calendar forms."""
     form_type = row.get("form_type")
     if form_type not in ("AL", "EL", "MC"):
         return None
     snapshot = json.loads(row["worker_snapshot"]) if isinstance(row.get("worker_snapshot"), str) else (row.get("worker_snapshot") or {})
-    display_name = google_sheets.calendar_display_name(snapshot.get("name"), row.get("worker_id"))
+    name = (worker_override or {}).get("name") or snapshot.get("name")
+    calendar_name = (worker_override or {}).get("calendarName") or snapshot.get("calendarName")
+    display_name = google_sheets.calendar_display_name(name, row.get("worker_id"), calendar_name)
     return _sheets_label(form_type, display_name, bool(row.get("is_half_day")), row.get("half_day_period"))
 
 
@@ -93,18 +89,31 @@ def _sync_submission_to_sheets(row: dict) -> None:
 
 
 def _remove_submission_from_sheets(row: dict) -> None:
-    """Best-effort removal of a submission's calendar lines on delete. Never raises."""
+    """Best-effort removal of a submission's calendar lines on delete. Never raises.
+
+    Uses the worker's CURRENT calendar name (from the workers table) rather than the
+    submission snapshot, because the rename hook rewrites sheet lines to the latest name
+    whenever the worker updates their profile. Snapshot-based labels would miss lines
+    that were renamed after submission.
+    """
     cfg = current_app.config
     if not cfg.get("GOOGLE_SHEETS_ENABLED"):
         return
-    label = _build_sheets_label(row)
-    if not label:
+    if row.get("form_type") not in ("AL", "EL", "MC"):
         return
     rng = _submission_date_range(row)
     if not rng:
         return
     start_d, end_d = rng
     try:
+        worker_row = query_one("SELECT name, calendar_name FROM workers WHERE worker_id = %s", (row.get("worker_id"),))
+        worker_override = {
+            "name": (worker_row or {}).get("name"),
+            "calendarName": (worker_row or {}).get("calendar_name"),
+        }
+        label = _build_sheets_label(row, worker_override=worker_override)
+        if not label:
+            return
         for d in google_sheets.date_range(start_d, end_d):
             google_sheets.remove_calendar_line(d, label)
     except Exception as exc:
@@ -180,6 +189,7 @@ def _row_to_calendar_entry(row: dict) -> dict:
         "id": row.get("id"),
         "workerId": row.get("worker_id"),
         "workerName": row.get("worker_name") or row.get("worker_id"),
+        "calendarName": row.get("calendar_name"),
         "formType": row.get("form_type"),
         "leaveType": row.get("leave_type"),
         "calendarStart": row.get("start_date").isoformat() if row.get("start_date") else None,
@@ -198,6 +208,7 @@ def calendar_entries():
     rows = query(
         """SELECT
              s.id, s.worker_id, COALESCE(w.name, s.worker_id) AS worker_name,
+             w.calendar_name,
              s.form_type, s.leave_type, s.start_date, s.end_date, s.duration_days,
              s.is_half_day, s.half_day_period, s.pdf_file_name, s.created_at
            FROM submissions s
@@ -330,6 +341,7 @@ def create_al_submission():
         "department": worker.get("department"),
         "houseTel": worker.get("houseTel"),
         "otherTel": worker.get("otherTel"),
+        "calendarName": worker.get("calendarName"),
     }
 
     execute(
@@ -414,6 +426,7 @@ def create_mc_submission():
         "department": worker.get("department"),
         "houseTel": worker.get("houseTel"),
         "otherTel": worker.get("otherTel"),
+        "calendarName": worker.get("calendarName"),
     }
 
     execute(
