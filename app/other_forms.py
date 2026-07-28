@@ -10,7 +10,13 @@ from .auth import require_auth, require_admin
 
 bp = Blueprint("other_forms", __name__)
 
-ALLOWED_EXTENSIONS = {".pdf"}
+ALLOWED_EXTENSIONS = {
+    ".pdf",
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
+    ".txt", ".csv",
+    ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+    ".zip",
+}
 
 
 def _others_dir() -> Path:
@@ -61,14 +67,14 @@ def other_forms():
 def upload_other_form():
     uploaded = request.files.get("file")
     if not uploaded or not uploaded.filename:
-        return jsonify({"error": "PDF file is required."}), 400
+        return jsonify({"error": "A file is required."}), 400
 
     safe_name = secure_filename(uploaded.filename)
     if not safe_name:
         return jsonify({"error": "Invalid file name."}), 400
 
     if Path(safe_name).suffix.lower() not in ALLOWED_EXTENSIONS:
-        return jsonify({"error": "Only PDF files can be uploaded."}), 400
+        return jsonify({"error": "Unsupported file type."}), 400
 
     target = (_others_dir() / safe_name).resolve()
     if target.parent != _others_dir().resolve():
@@ -90,7 +96,7 @@ def delete_other_form(file_name: str):
         return jsonify({"error": "Form not found."}), 404
 
     if target.suffix.lower() not in ALLOWED_EXTENSIONS:
-        return jsonify({"error": "Only managed PDF forms can be deleted."}), 400
+        return jsonify({"error": "Only managed forms can be deleted."}), 400
 
     target.unlink()
     return jsonify({"deleted": file_name, "forms": _list_other_forms()})
