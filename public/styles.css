@@ -164,9 +164,11 @@ label {
 }
 
 .login-view {
-  display: grid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
   min-height: 100vh;
-  place-items: center;
   padding: 24px;
 }
 
@@ -1703,6 +1705,148 @@ tr:last-child td {
 
 .profile-setup-panel {
   max-width: 680px;
+}
+
+/* Patch notes — side card next to the login panel */
+.patchnotes-box {
+  flex-shrink: 0;
+  width: 320px;
+  max-height: min(78vh, 620px);
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow-y: auto;
+}
+
+.patchnotes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.patchnotes-header h2 {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.patchnotes-pill {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.patchnotes-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.patchnote-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    "badge title"
+    "badge date";
+  align-items: start;
+  gap: 4px 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--control-bg);
+  color: var(--text);
+  text-decoration: none;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.patchnote-item:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  transform: translateY(-1px);
+}
+
+.patchnote-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.patchnote-badge {
+  grid-area: badge;
+  align-self: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.patchnote-title {
+  grid-area: title;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.patchnote-date {
+  grid-area: date;
+  color: var(--muted);
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.patchnotes-all {
+  display: inline-block;
+  margin-top: 18px;
+  color: var(--accent);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.patchnotes-all:hover {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+
+@media (max-width: 1024px) {
+  .patchnotes-box {
+    width: 280px;
+    padding: 18px;
+  }
+}
+
+@media (max-width: 760px) {
+  .login-view {
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .patchnotes-box {
+    width: 100%;
+    max-width: 460px;
+    max-height: none;
+  }
 }
 
 .setup-note {
