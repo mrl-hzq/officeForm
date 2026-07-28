@@ -119,7 +119,7 @@ Original Excel templates live in `formOri/`.
 
 Current template paths:
 
-- AL/EL: `formOri/Leave Application Form.xls`
+- AL/EL: `formOri/Leave Application Form.xls` (supports half-day 0.5 via `isHalfDay` checkbox when start == end)
 - MC: `formOri/MC FORM .xls`
 - KPI: `formOri/Borang Penilaian Prestasi (Non Leader).xlsx`
 - Expense Claim: `formOri/expenses claim form baru.xlsx`
