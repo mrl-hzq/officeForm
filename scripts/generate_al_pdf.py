@@ -85,6 +85,7 @@ def generate_al_pdf(
     leave_taken: float = 0,
     leave_balance: float = 0,
     application_date: str,
+    half_day_period: str | None = None,
 ) -> None:
     template_path = Path(template_path).resolve()
     working_workbook_path = Path(working_workbook_path).resolve()
@@ -101,6 +102,8 @@ def generate_al_pdf(
     _set_merged_value(actions, "L23", duration_days)
     _set_merged_date_text(actions, "R24", start_date)
     _set_merged_date_text(actions, "AG24", end_date)
+    if half_day_period:
+        _set_merged_value(actions, "L24", half_day_period)
 
     reason_cells = {
         "annual": "Z28",

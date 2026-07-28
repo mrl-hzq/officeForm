@@ -83,6 +83,7 @@ def _row_to_submission(row: dict) -> dict:
         "affectsAnnualLeave": bool(row.get("affects_al")),
         "annualLeaveDaysApplied": float(row["al_days_applied"]) if row.get("al_days_applied") is not None else 0,
         "isHalfDay": bool(row.get("is_half_day")),
+        "halfDayPeriod": row.get("half_day_period"),
         "reason": row.get("reason"),
         "kpiMonth": row.get("kpi_month"),
         "applicationDate": row.get("application_date").isoformat() if row.get("application_date") else None,
@@ -109,6 +110,8 @@ def _row_to_calendar_entry(row: dict) -> dict:
         "calendarStart": row.get("start_date").isoformat() if row.get("start_date") else None,
         "calendarEnd": row.get("end_date").isoformat() if row.get("end_date") else None,
         "durationDays": row.get("duration_days"),
+        "isHalfDay": bool(row.get("is_half_day")),
+        "halfDayPeriod": row.get("half_day_period"),
         "isOwn": row.get("worker_id") == g.worker_id,
     }
 
@@ -120,7 +123,7 @@ def calendar_entries():
         """SELECT
              s.id, s.worker_id, COALESCE(w.name, s.worker_id) AS worker_name,
              s.form_type, s.leave_type, s.start_date, s.end_date, s.duration_days,
-             s.created_at
+             s.is_half_day, s.half_day_period, s.created_at
            FROM submissions s
            LEFT JOIN workers w ON w.worker_id = s.worker_id
            WHERE s.form_type IN ('AL', 'EL', 'MC')
@@ -195,8 +198,13 @@ def create_al_submission():
         return jsonify({"error": "Reason is required."}), 400
 
     is_half_day = body.get("isHalfDay", False)
-    if is_half_day and start.date() != end.date():
-        return jsonify({"error": "Half-day leave must be for a single day."}), 400
+    half_day_period = None
+    if is_half_day:
+        if start.date() != end.date():
+            return jsonify({"error": "Half-day leave must be for a single day."}), 400
+        half_day_period = clean_profile_value(body.get("halfDayPeriod", "")).upper()
+        if half_day_period not in ("AM", "PM"):
+            return jsonify({"error": "HalfDayPeriod must be AM or PM."}), 400
     raw_days = (end.date() - start.date()).days + 1
     duration_days = 0.5 if is_half_day else float(raw_days)
     affects_al = leave_type in AL_DEDUCTING_LEAVE_TYPES
@@ -231,6 +239,7 @@ def create_al_submission():
             reason=reason,
             leave_summary=leave_summary,
             application_iso=application_iso,
+            half_day_period=half_day_period,
         )
     except Exception as exc:
         return jsonify({"error": f"PDF generation failed: {exc}"}), 500
@@ -247,12 +256,13 @@ def create_al_submission():
     execute(
         """INSERT INTO submissions
            (id, worker_id, form_type, form_name, leave_type, start_date, end_date,
-            duration_days, affects_al, al_days_applied, is_half_day, reason, application_date,
+            duration_days, affects_al, al_days_applied, is_half_day, half_day_period,
+            reason, application_date,
             leave_summary, worker_snapshot, pdf_file_name, workbook_file_name, created_at)
-           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
         (submission_id, g.worker_id, leave_type_meta["code"], leave_type_meta["name"],
          leave_type, start_iso, end_iso, duration_days, affects_al, annual_leave_days,
-         is_half_day, reason, application_iso, json.dumps(leave_summary),
+         is_half_day, half_day_period, reason, application_iso, json.dumps(leave_summary),
          json.dumps(worker_snapshot), pdf_file_name, workbook_file_name, created_at),
     )
 

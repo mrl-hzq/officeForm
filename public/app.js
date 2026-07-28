@@ -346,6 +346,8 @@ const elements = {
   formMessage: document.querySelector("#formMessage"),
   halfDayCheckbox: document.querySelector("#halfDayCheckbox"),
   halfDayLabel: document.querySelector("#halfDayLabel"),
+  halfDayPeriodGroup: document.querySelector("#halfDayPeriodGroup"),
+  halfDayPeriodInputs: document.querySelectorAll("input[name='halfDayPeriod']"),
   mcForm: document.querySelector("#mcForm"),
   mcStartDateInput: document.querySelector("#mcStartDateInput"),
   mcEndDateInput: document.querySelector("#mcEndDateInput"),
@@ -1014,6 +1016,7 @@ function calculateAl() {
   }
 
   const isHalfDay = startValue === endValue && elements.halfDayCheckbox.checked;
+  const halfDayPeriod = isHalfDay ? getSelectedHalfDayPeriod() : null;
   const rawDays = inclusiveDayCount(start, end);
   const durationDays = isHalfDay ? 0.5 : rawDays;
   const balanceBefore = Number(state.worker.annualLeaveBalance || 0);
@@ -1033,8 +1036,16 @@ function calculateAl() {
     leaveType,
     affectsAnnualLeave,
     balanceAfter,
-    isHalfDay
+    isHalfDay,
+    halfDayPeriod
   };
+}
+
+function getSelectedHalfDayPeriod() {
+  for (const input of elements.halfDayPeriodInputs) {
+    if (input.checked) return input.value;
+  }
+  return "AM";
 }
 
 function calculateMc() {
@@ -1960,6 +1971,7 @@ function toggleHalfDayVisibility() {
   const show = elements.startDateInput.value === elements.endDateInput.value
     && !!elements.startDateInput.value;
   elements.halfDayLabel.style.display = show ? "" : "none";
+  elements.halfDayPeriodGroup.style.display = show && elements.halfDayCheckbox.checked ? "" : "none";
   if (!show) elements.halfDayCheckbox.checked = false;
 }
 
@@ -1976,7 +1988,10 @@ elements.endDateInput.addEventListener("change", () => {
   calculateAl();
 });
 
-elements.halfDayCheckbox.addEventListener("change", calculateAl);
+elements.halfDayCheckbox.addEventListener("change", () => {
+  elements.halfDayPeriodGroup.style.display = elements.halfDayCheckbox.checked ? "" : "none";
+  calculateAl();
+});
 
 elements.leaveTypeInputs.forEach(input => {
   input.addEventListener("change", calculateAl);
@@ -2091,6 +2106,7 @@ elements.alForm.addEventListener("submit", async event => {
       endDate: calculation.endDate,
       leaveType: calculation.leaveType,
       isHalfDay: calculation.isHalfDay || false,
+      halfDayPeriod: calculation.halfDayPeriod,
       reason
     };
     const { submission } = await api("/api/submissions/al", {

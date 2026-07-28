@@ -75,6 +75,7 @@ def _regenerate_pdf(filename: str) -> None:
                 reason=row.get("reason", ""),
                 leave_summary=_loadj(row.get("leave_summary")),
                 application_iso=_iso(row.get("application_date")),
+                half_day_period=row.get("half_day_period"),
             )
         elif form_type == "MC":
             pdf_service.generate_mc(

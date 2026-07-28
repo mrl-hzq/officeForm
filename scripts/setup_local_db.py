@@ -100,6 +100,7 @@ def main():
             affects_al          BOOLEAN DEFAULT FALSE,
             al_days_applied     DECIMAL(4,1) DEFAULT 0,
             is_half_day         BOOLEAN DEFAULT FALSE,
+            half_day_period     VARCHAR(2),
             reason              TEXT,
             kpi_month           VARCHAR(7),
             application_date    DATE,

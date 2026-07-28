@@ -19,7 +19,8 @@ def _remove_excel_temp_siblings(workbook_path) -> None:
 
 
 def generate_al(*, template_path, workbook_path, pdf_path, worker, start_iso, end_iso,
-                duration_days, leave_type, reason, leave_summary, application_iso):
+                duration_days, leave_type, reason, leave_summary, application_iso,
+                half_day_period=None):
     from scripts.generate_al_pdf import generate_al_pdf
 
     try:
@@ -41,6 +42,7 @@ def generate_al(*, template_path, workbook_path, pdf_path, worker, start_iso, en
             leave_taken=float(leave_summary["takenToDate"]),
             leave_balance=float(leave_summary["balanceAfter"]),
             application_date=application_iso,
+            half_day_period=half_day_period,
         )
     finally:
         _remove_excel_temp_siblings(workbook_path)
