@@ -122,3 +122,62 @@ The old JSON files in `data/` are migration/backup inputs, not the active backen
 - Personal generated records are saved in MySQL and shown in History.
 - Calendar shows shared AL/EL/MC visibility across users.
 - Others shows shared uploaded PDFs, with upload/delete controls for admin users.
+
+## Google Sheets Calendar Sync
+
+Successful AL/EL/MC submissions best-effort append a labeled line into the worker's
+day cell of the shared Google Spreadsheet calendar tab (`2026` by default). KPI, OT,
+and Expense Claim are not synced. Sync is opt-in via `GOOGLE_SHEETS_ENABLED=1` plus
+`GOOGLE_CREDENTIALS_PATH`, `GOOGLE_SHEET_ID`, `GOOGLE_SHEET_TAB` in `.env`. See
+`AGENTS.md` for the full setup (service-account credentials, sheet sharing, schema).
+
+Existing DBs need a one-time column:
+
+```sql
+ALTER TABLE submissions ADD COLUMN sheets_synced_at DATETIME NULL;
+```
+
+### Backlog and verify
+
+`scripts/sync_google_sheets_backlog.py` reconciles the spreadsheet against the DB.
+It is idempotent (cell-level exact-line dedup) and safe to re-run.
+
+Native:
+
+```powershell
+python scripts/sync_google_sheets_backlog.py --dry-run
+python scripts/sync_google_sheets_backlog.py
+```
+
+Docker:
+
+```bash
+sudo docker exec officeform-web-1 python scripts/sync_google_sheets_backlog.py --dry-run
+sudo docker exec officeform-web-1 python scripts/sync_google_sheets_backlog.py
+```
+
+Modes and flags:
+
+| Command | What it does |
+|---|---|
+| `--dry-run` | Report planned writes / missing lines without applying |
+| `--worker-id <id>` | Restrict to one Worker ID |
+| `--since YYYY-MM-DD` | Only submissions with `start_date >=` that date |
+| `--verify` | Re-check EVERY AL/EL/MC submission against the sheet and re-write missing lines (reconciles manual edits/deletions). Ignores `sheets_synced_at`. |
+| `--verify --dry-run` | Detect missing lines without writing |
+
+Use the default (no `--verify`) to catch rows that never synced. Use `--verify` when
+the dry-run reports nothing unsynced but lines are missing from the sheet (e.g. someone
+deleted or edited a line manually).
+
+Per-worker sync status:
+
+```bash
+sudo docker exec officeform-db-1 mysql -uroot -proot officeform -e "SELECT worker_id, MAX(sheets_synced_at) AS last_synced, COUNT(*) AS synced_count FROM submissions WHERE sheets_synced_at IS NOT NULL GROUP BY worker_id ORDER BY last_synced DESC;"
+```
+
+Unsynced rows per worker:
+
+```bash
+sudo docker exec officeform-db-1 mysql -uroot -proot officeform -e "SELECT worker_id, COUNT(*) AS unsynced FROM submissions WHERE form_type IN ('AL','EL','MC') AND sheets_synced_at IS NULL GROUP BY worker_id;"
+```
