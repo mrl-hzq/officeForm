@@ -2833,6 +2833,87 @@ function restoreAllDrafts() {
   formEl.addEventListener("change", () => scheduleDraftSave(key, drafts[key].serialize));
 });
 
+// ----- Patch notes: fetch latest merged PRs from GitHub once per hour -----
+const PATCHNOTES_CACHE_KEY = "patchnotesCache_v1";
+const PATCHNOTES_TTL_MS = 60 * 60 * 1000;
+
+function formatPrDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function renderPatchnotes(items, listEl) {
+  if (!listEl) return;
+  listEl.innerHTML = "";
+  items.forEach(item => {
+    const li = document.createElement("li");
+    const a = document.createElement("a");
+    a.className = "patchnote-item";
+    a.href = item.html_url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+
+    const badge = document.createElement("span");
+    badge.className = "patchnote-badge";
+    badge.textContent = `PR #${item.number}`;
+
+    const title = document.createElement("span");
+    title.className = "patchnote-title";
+    title.textContent = item.title;
+
+    const date = document.createElement("span");
+    date.className = "patchnote-date";
+    date.textContent = formatPrDate(item.merged_at || item.updated_at);
+
+    a.appendChild(badge);
+    a.appendChild(title);
+    a.appendChild(date);
+    li.appendChild(a);
+    listEl.appendChild(li);
+  });
+}
+
+async function loadPatchnotes() {
+  const listEl = document.getElementById("patchnotesList");
+  if (!listEl) return;
+  const repo = listEl.dataset.repo || "mrl-hzq/officeForm";
+
+  let cache = null;
+  try {
+    const raw = localStorage.getItem(PATCHNOTES_CACHE_KEY);
+    if (raw) cache = JSON.parse(raw);
+  } catch (e) { cache = null; }
+
+  const now = Date.now();
+  if (cache && cache.fetchedAt && (now - cache.fetchedAt) < PATCHNOTES_TTL_MS && Array.isArray(cache.items)) {
+    renderPatchnotes(cache.items, listEl);
+    return;
+  }
+
+  try {
+    const res = await fetch(`https://api.github.com/repos/${repo}/pulls?state=closed&sort=updated&direction=desc&per_page=30`, {
+      headers: { "Accept": "application/vnd.github+json" }
+    });
+    if (!res.ok) throw new Error(`GitHub API ${res.status}`);
+    const prs = await res.json();
+    const merged = (Array.isArray(prs) ? prs : [])
+      .filter(pr => pr && pr.merged_at)
+      .slice(0, 5);
+    renderPatchnotes(merged, listEl);
+    try {
+      localStorage.setItem(PATCHNOTES_CACHE_KEY, JSON.stringify({ fetchedAt: now, items: merged }));
+    } catch (e) { /* ignore quota */ }
+  } catch (e) {
+    if (cache && Array.isArray(cache.items)) {
+      renderPatchnotes(cache.items, listEl);
+    }
+  }
+}
+
+loadPatchnotes();
+
 applyTheme(state.theme, { persist: false });
 renderKpiStaticInstructions();
 renderKpiSections();
