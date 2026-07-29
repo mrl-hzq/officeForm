@@ -557,6 +557,513 @@ def create_kpi_submission():
     return jsonify({"submission": _row_to_submission(row)}), 201
 
 
+def _load_existing_submission(submission_id: str):
+    row = query_one(
+        "SELECT * FROM submissions WHERE id = %s AND worker_id = %s",
+        (submission_id, g.worker_id),
+    )
+    return row
+
+
+def _apply_remove_entitlement(leave_summary: dict, body: dict) -> dict:
+    if bool(body.get("removeEntitlement")):
+        leave_summary["remove_entitlement"] = True
+    return leave_summary
+
+
+@bp.put("/api/submissions/<submission_id>")
+@require_auth
+def update_submission(submission_id: str):
+    row = _load_existing_submission(submission_id)
+    if not row:
+        return jsonify({"error": "Submission not found."}), 404
+
+    form_type = row.get("form_type")
+    if form_type in ("AL", "EL"):
+        return _update_al_submission(row)
+    if form_type == "MC":
+        return _update_mc_submission(row)
+    if form_type == "KPI":
+        return _update_kpi_submission(row)
+    if form_type == "EXP":
+        return _update_expense_submission(row)
+    if form_type == "OT":
+        return _update_ot_submission(row)
+    return jsonify({"error": "This form type cannot be edited."}), 400
+
+
+def _replace_generated_files(row: dict, pdf_dir: Path, wb_dir: Path, new_pdf_name: str, new_wb_name: str):
+    """Delete the old generated pdf/workbook from a submission row and return paths for new ones."""
+    _remove_generated_file(row.get("pdf_file_name"), pdf_dir)
+    _remove_generated_workbook(row.get("workbook_file_name"), wb_dir)
+    return pdf_dir / new_pdf_name, wb_dir / new_wb_name
+
+
+def _update_al_submission(row: dict):
+    body = request.get_json(silent=True) or {}
+    worker = _get_worker_enriched(g.worker_id)
+    if not worker:
+        return jsonify({"error": f"No saved worker profile found for {g.worker_id}."}), 404
+
+    try:
+        start = parse_iso_date(body.get("startDate"), "startDate")
+        end = parse_iso_date(body.get("endDate") or body.get("startDate"), "endDate")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    if end < start:
+        return jsonify({"error": "End date cannot be before start date."}), 400
+
+    period_start = parse_optional_date(worker.get("employmentStartDate"))
+    period_end = parse_optional_date(worker.get("employmentEndDate"))
+    if period_start and period_end and (start.date() < period_start or end.date() > period_end):
+        return jsonify({"error": "AL dates must be within the worker employment period."}), 400
+
+    try:
+        leave_type = normalize_leave_type(body.get("leaveType"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    reason = clean_profile_value(body.get("reason"))
+    if not reason:
+        return jsonify({"error": "Reason is required."}), 400
+
+    is_half_day = body.get("isHalfDay", False)
+    half_day_period = None
+    if is_half_day:
+        if start.date() != end.date():
+            return jsonify({"error": "Half-day leave must be for a single day."}), 400
+        half_day_period = clean_profile_value(body.get("halfDayPeriod", "")).upper()
+        if half_day_period not in ("AM", "PM"):
+            return jsonify({"error": "HalfdayPeriod must be AM or PM."}), 400
+    raw_days = (end.date() - start.date()).days + 1
+    duration_days = 0.5 if is_half_day else float(raw_days)
+    affects_al = leave_type in AL_DEDUCTING_LEAVE_TYPES
+    annual_leave_days = duration_days if affects_al else 0
+    leave_summary = get_leave_summary(worker, annual_leave_days)
+    leave_summary = _apply_remove_entitlement(leave_summary, body)
+    leave_type_meta = LEAVE_TYPES[leave_type]
+    start_iso = to_iso_date(start)
+    end_iso = to_iso_date(end)
+    application_iso = row.get("application_date").isoformat() if row.get("application_date") else to_iso_date(datetime.now())
+    safe_worker_id = sanitize_file_part(g.worker_id)
+    safe_sub_id = sanitize_file_part(row["id"])
+    pdf_file_name = f"{safe_worker_id}_{leave_type_meta['code']}_{start_iso}_{safe_sub_id}.pdf"
+    workbook_file_name = f"{safe_worker_id}_{leave_type_meta['code']}_{start_iso}_{safe_sub_id}.xls"
+    pdf_dir = current_app.config["PDF_DIR"]
+    wb_dir = current_app.config["WORKBOOK_DIR"]
+    pdf_path, workbook_path = _replace_generated_files(row, pdf_dir, wb_dir, pdf_file_name, workbook_file_name)
+    form_ori_dir = current_app.config["FORM_ORI_DIR"]
+
+    try:
+        pdf_service.generate_al(
+            template_path=form_ori_dir / "Leave Application Form.xls",
+            workbook_path=workbook_path,
+            pdf_path=pdf_path,
+            worker=worker,
+            start_iso=start_iso,
+            end_iso=end_iso,
+            duration_days=duration_days,
+            leave_type=leave_type,
+            reason=reason,
+            leave_summary=leave_summary,
+            application_iso=application_iso,
+            half_day_period=half_day_period,
+        )
+    except Exception as exc:
+        return jsonify({"error": f"PDF generation failed: {exc}"}), 500
+
+    worker_snapshot = {
+        "workerId": worker.get("workerId"),
+        "name": worker.get("name"),
+        "designation": worker.get("designation"),
+        "department": worker.get("department"),
+        "houseTel": worker.get("houseTel"),
+        "otherTel": worker.get("otherTel"),
+        "calendarName": worker.get("calendarName"),
+    }
+
+    _remove_submission_from_sheets(row)
+
+    execute(
+        """UPDATE submissions SET
+            form_type = %s, form_name = %s, leave_type = %s,
+            start_date = %s, end_date = %s, duration_days = %s,
+            affects_al = %s, al_days_applied = %s, is_half_day = %s,
+            half_day_period = %s, reason = %s, application_date = %s,
+            leave_summary = %s, worker_snapshot = %s,
+            pdf_file_name = %s, workbook_file_name = %s,
+            sheets_synced_at = NULL
+           WHERE id = %s""",
+        (leave_type_meta["code"], leave_type_meta["name"], leave_type, start_iso, end_iso,
+         duration_days, affects_al, annual_leave_days, is_half_day, half_day_period,
+         reason, application_iso, json.dumps(leave_summary), json.dumps(worker_snapshot),
+         pdf_file_name, workbook_file_name, row["id"]),
+    )
+
+    new_row = query_one("SELECT * FROM submissions WHERE id = %s", (row["id"],))
+    _sync_submission_to_sheets(new_row)
+    return jsonify({"submission": _row_to_submission(new_row)}), 200
+
+
+def _update_mc_submission(row: dict):
+    body = request.get_json(silent=True) or {}
+    worker = _get_worker_enriched(g.worker_id)
+    if not worker:
+        return jsonify({"error": f"No saved worker profile found for {g.worker_id}."}), 404
+
+    try:
+        start = parse_iso_date(body.get("startDate"), "startDate")
+        end = parse_iso_date(body.get("endDate") or body.get("startDate"), "endDate")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    if end < start:
+        return jsonify({"error": "End date cannot be before start date."}), 400
+
+    period_start = parse_optional_date(worker.get("employmentStartDate"))
+    period_end = parse_optional_date(worker.get("employmentEndDate"))
+    if period_start and period_end and (start.date() < period_start or end.date() > period_end):
+        return jsonify({"error": "MC dates must be within the worker employment period."}), 400
+
+    sickness_reason = clean_profile_value(body.get("sicknessReason") or body.get("reason"))
+    if not sickness_reason:
+        return jsonify({"error": "Sickness/reason is required."}), 400
+
+    duration_days = (end.date() - start.date()).days + 1
+    start_iso = to_iso_date(start)
+    end_iso = to_iso_date(end)
+    application_iso = row.get("application_date").isoformat() if row.get("application_date") else to_iso_date(datetime.now())
+    safe_worker_id = sanitize_file_part(g.worker_id)
+    safe_sub_id = sanitize_file_part(row["id"])
+    pdf_file_name = f"{safe_worker_id}_MC_{start_iso}_{safe_sub_id}.pdf"
+    workbook_file_name = f"{safe_worker_id}_MC_{start_iso}_{safe_sub_id}.xls"
+    pdf_dir = current_app.config["PDF_DIR"]
+    wb_dir = current_app.config["WORKBOOK_DIR"]
+    pdf_path, workbook_path = _replace_generated_files(row, pdf_dir, wb_dir, pdf_file_name, workbook_file_name)
+    form_ori_dir = current_app.config["FORM_ORI_DIR"]
+
+    try:
+        pdf_service.generate_mc(
+            template_path=form_ori_dir / "MC FORM .xls",
+            workbook_path=workbook_path,
+            pdf_path=pdf_path,
+            worker=worker,
+            start_iso=start_iso,
+            end_iso=end_iso,
+            duration_days=duration_days,
+            sickness_reason=sickness_reason,
+            application_iso=application_iso,
+        )
+    except Exception as exc:
+        return jsonify({"error": f"PDF generation failed: {exc}"}), 500
+
+    worker_snapshot = {
+        "workerId": worker.get("workerId"),
+        "name": worker.get("name"),
+        "designation": worker.get("designation"),
+        "department": worker.get("department"),
+        "houseTel": worker.get("houseTel"),
+        "otherTel": worker.get("otherTel"),
+        "calendarName": worker.get("calendarName"),
+    }
+
+    _remove_submission_from_sheets(row)
+
+    execute(
+        """UPDATE submissions SET
+            start_date = %s, end_date = %s, duration_days = %s,
+            reason = %s, application_date = %s, worker_snapshot = %s,
+            pdf_file_name = %s, workbook_file_name = %s,
+            sheets_synced_at = NULL
+           WHERE id = %s""",
+        (start_iso, end_iso, duration_days, sickness_reason, application_iso,
+         json.dumps(worker_snapshot), pdf_file_name, workbook_file_name, row["id"]),
+    )
+
+    new_row = query_one("SELECT * FROM submissions WHERE id = %s", (row["id"],))
+    _sync_submission_to_sheets(new_row)
+    return jsonify({"submission": _row_to_submission(new_row)}), 200
+
+
+def _update_kpi_submission(row: dict):
+    body = request.get_json(silent=True) or {}
+    worker = _get_worker_enriched(g.worker_id)
+    if not worker:
+        return jsonify({"error": f"No saved worker profile found for {g.worker_id}."}), 404
+
+    try:
+        month_start = parse_year_month(body.get("kpiMonth"), "kpiMonth")
+        scores = parse_kpi_scores(body)
+        comments = parse_kpi_comments(body)
+        summary_options = parse_kpi_options(body)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    period_start = parse_optional_date(worker.get("employmentStartDate"))
+    period_end = parse_optional_date(worker.get("employmentEndDate"))
+    month_end = end_of_month(month_start)
+    if period_start and period_end and (month_start < period_start or month_end > period_end):
+        return jsonify({"error": "KPI month must be within the worker employment period."}), 400
+
+    month_key = month_start.strftime("%Y-%m")
+    existing = query_one(
+        "SELECT id FROM submissions WHERE worker_id = %s AND form_type = 'KPI' AND kpi_month = %s AND id <> %s",
+        (g.worker_id, month_key, row["id"]),
+    )
+    if existing:
+        return jsonify({"error": f"KPI form for {month_key} already exists."}), 400
+
+    evaluator_name = clean_profile_value(body.get("evaluatorName") or worker.get("evaluatorName"))
+    if not evaluator_name:
+        return jsonify({"error": "Evaluator name is required."}), 400
+
+    task_list = clean_profile_value(body.get("taskList"))
+    if not task_list:
+        return jsonify({"error": "Task list is required."}), 400
+
+    worker_feedback = clean_profile_value(body.get("workerFeedback"))
+    training_needs = clean_profile_value(body.get("trainingNeeds"))
+    evaluator_feedback = clean_profile_value(body.get("evaluatorFeedback"))
+    month_label = format_kpi_month_label(month_start)
+    application_iso = row.get("application_date").isoformat() if row.get("application_date") else to_iso_date(datetime.now())
+    safe_worker_id = sanitize_file_part(g.worker_id)
+    safe_sub_id = sanitize_file_part(row["id"])
+    pdf_file_name = f"{safe_worker_id}_KPI_{month_key}_{safe_sub_id}.pdf"
+    workbook_file_name = f"{safe_worker_id}_KPI_{month_key}_{safe_sub_id}.xlsx"
+    pdf_dir = current_app.config["PDF_DIR"]
+    wb_dir = current_app.config["WORKBOOK_DIR"]
+    pdf_path, workbook_path = _replace_generated_files(row, pdf_dir, wb_dir, pdf_file_name, workbook_file_name)
+    form_ori_dir = current_app.config["FORM_ORI_DIR"]
+
+    try:
+        pdf_service.generate_kpi(
+            template_path=form_ori_dir / "Borang Penilaian Prestasi (Non Leader).xlsx",
+            workbook_path=workbook_path,
+            pdf_path=pdf_path,
+            worker=worker,
+            evaluator_name=evaluator_name,
+            month_label=month_label,
+            task_list=task_list,
+            scores=scores,
+            comments=comments,
+            summary_options=summary_options,
+            worker_feedback=worker_feedback,
+            training_needs=training_needs,
+            evaluator_feedback=evaluator_feedback,
+            application_date=application_iso,
+        )
+    except Exception as exc:
+        return jsonify({"error": f"PDF generation failed: {exc}"}), 500
+
+    kpi_data = {
+        "evaluatorName": evaluator_name,
+        "taskList": task_list,
+        "scores": scores,
+        "comments": comments,
+        "summaryOptions": summary_options,
+        "workerFeedback": worker_feedback,
+        "trainingNeeds": training_needs,
+        "evaluatorFeedback": evaluator_feedback,
+    }
+    worker_snapshot = {
+        "workerId": worker.get("workerId"),
+        "name": worker.get("name"),
+        "designation": worker.get("designation"),
+        "department": worker.get("department"),
+        "houseTel": worker.get("houseTel"),
+        "otherTel": worker.get("otherTel"),
+        "evaluatorName": worker.get("evaluatorName"),
+    }
+
+    execute(
+        """UPDATE submissions SET
+            start_date = %s, end_date = %s, reason = %s, kpi_month = %s,
+            application_date = %s, kpi_data = %s, worker_snapshot = %s,
+            pdf_file_name = %s, workbook_file_name = %s
+           WHERE id = %s""",
+        (month_start.isoformat(), month_end.isoformat(), task_list, month_key,
+         application_iso, json.dumps(kpi_data), json.dumps(worker_snapshot),
+         pdf_file_name, workbook_file_name, row["id"]),
+    )
+
+    new_row = query_one("SELECT * FROM submissions WHERE id = %s", (row["id"],))
+    return jsonify({"submission": _row_to_submission(new_row)}), 200
+
+
+def _update_expense_submission(row: dict):
+    body = request.get_json(silent=True) or {}
+    worker = _get_worker_enriched(g.worker_id)
+    if not worker:
+        return jsonify({"error": f"No saved worker profile found for {g.worker_id}."}), 404
+
+    try:
+        month_start = parse_year_month(body.get("claimMonth"), "claimMonth")
+        month_end_start = parse_year_month(body.get("claimMonthEnd"), "claimMonthEnd") if body.get("claimMonthEnd") else None
+        items = parse_expense_items(body)
+        advances = parse_optional_non_negative_number(body.get("advances"), "advances")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    if month_end_start and month_end_start < month_start:
+        return jsonify({"error": "Claim month end cannot be before the start month."}), 400
+
+    range_end = end_of_month(month_end_start) if month_end_start else end_of_month(month_start)
+    for item in items:
+        item_date = parse_optional_date(item["date"])
+        if not item_date or item_date < month_start or item_date > range_end:
+            return jsonify({"error": "Expense item dates must be within the claim month range."}), 400
+
+    supervisor_name = clean_profile_value(body.get("supervisorName") or worker.get("evaluatorName"))
+    if not supervisor_name:
+        return jsonify({"error": "Supervisor name is required."}), 400
+
+    site = clean_profile_value(body.get("site"))
+    month_key = month_start.strftime("%Y-%m")
+    month_label = format_month_range_label(month_start, month_end_start, upper=True)
+    application_iso = row.get("application_date").isoformat() if row.get("application_date") else to_iso_date(datetime.now())
+    safe_worker_id = sanitize_file_part(g.worker_id)
+    safe_sub_id = sanitize_file_part(row["id"])
+    pdf_file_name = f"{safe_worker_id}_EXP_{month_key}_{safe_sub_id}.pdf"
+    workbook_file_name = f"{safe_worker_id}_EXP_{month_key}_{safe_sub_id}.xlsx"
+    pdf_dir = current_app.config["PDF_DIR"]
+    wb_dir = current_app.config["WORKBOOK_DIR"]
+    pdf_path, workbook_path = _replace_generated_files(row, pdf_dir, wb_dir, pdf_file_name, workbook_file_name)
+    form_ori_dir = current_app.config["FORM_ORI_DIR"]
+
+    try:
+        pdf_service.generate_expense(
+            template_path=form_ori_dir / "expenses claim form baru.xlsx",
+            workbook_path=workbook_path,
+            pdf_path=pdf_path,
+            worker=worker,
+            supervisor_name=supervisor_name,
+            site=site,
+            month_label=month_label,
+            items=items,
+            advances=advances,
+        )
+    except Exception as exc:
+        return jsonify({"error": f"PDF generation failed: {exc}"}), 500
+
+    total_amount = round(sum(float(item.get("total") or 0) for item in items), 2)
+    expense_data = {
+        "claimMonth": month_key,
+        "claimMonthEnd": month_end_start.strftime("%Y-%m") if month_end_start else None,
+        "site": site,
+        "supervisorName": supervisor_name,
+        "advances": advances,
+        "totalAmount": total_amount,
+        "amountToReimburse": round(total_amount - advances, 2),
+        "items": items,
+    }
+    worker_snapshot = {
+        "workerId": worker.get("workerId"),
+        "name": worker.get("name"),
+        "designation": worker.get("designation"),
+        "department": worker.get("department"),
+        "evaluatorName": worker.get("evaluatorName"),
+    }
+    start_iso = min(item["date"] for item in items)
+    end_iso = max(item["date"] for item in items)
+
+    execute(
+        """UPDATE submissions SET
+            start_date = %s, end_date = %s, duration_days = %s, reason = %s,
+            kpi_month = %s, application_date = %s, kpi_data = %s, worker_snapshot = %s,
+            pdf_file_name = %s, workbook_file_name = %s
+           WHERE id = %s""",
+        (start_iso, end_iso, len(items), f"{month_key} expense claim", month_key,
+         application_iso, json.dumps(expense_data), json.dumps(worker_snapshot),
+         pdf_file_name, workbook_file_name, row["id"]),
+    )
+
+    new_row = query_one("SELECT * FROM submissions WHERE id = %s", (row["id"],))
+    return jsonify({"submission": _row_to_submission(new_row)}), 200
+
+
+def _update_ot_submission(row: dict):
+    body = request.get_json(silent=True) or {}
+    worker = _get_worker_enriched(g.worker_id)
+    if not worker:
+        return jsonify({"error": f"No saved worker profile found for {g.worker_id}."}), 404
+
+    try:
+        month_start = parse_year_month(body.get("claimMonth"), "claimMonth")
+        month_end_start = parse_year_month(body.get("claimMonthEnd"), "claimMonthEnd") if body.get("claimMonthEnd") else None
+        items = parse_ot_items(body)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    if month_end_start and month_end_start < month_start:
+        return jsonify({"error": "Claim month end cannot be before the start month."}), 400
+
+    range_end = end_of_month(month_end_start) if month_end_start else end_of_month(month_start)
+    for item in items:
+        item_date = parse_optional_date(item["date"])
+        if not item_date or item_date < month_start or item_date > range_end:
+            return jsonify({"error": "Overtime item dates must be within the claim month range."}), 400
+
+    month_key = month_start.strftime("%Y-%m")
+    month_label = format_month_range_label(month_start, month_end_start)
+    application_iso = row.get("application_date").isoformat() if row.get("application_date") else to_iso_date(datetime.now())
+    safe_worker_id = sanitize_file_part(g.worker_id)
+    safe_sub_id = sanitize_file_part(row["id"])
+    pdf_file_name = f"{safe_worker_id}_OT_{month_key}_{safe_sub_id}.pdf"
+    workbook_file_name = f"{safe_worker_id}_OT_{month_key}_{safe_sub_id}.xls"
+    pdf_dir = current_app.config["PDF_DIR"]
+    wb_dir = current_app.config["WORKBOOK_DIR"]
+    pdf_path, workbook_path = _replace_generated_files(row, pdf_dir, wb_dir, pdf_file_name, workbook_file_name)
+    form_ori_dir = current_app.config["FORM_ORI_DIR"]
+
+    try:
+        pdf_service.generate_ot(
+            template_path=form_ori_dir / "OT Form latest.xls",
+            workbook_path=workbook_path,
+            pdf_path=pdf_path,
+            worker=worker,
+            month_label=month_label,
+            items=items,
+        )
+    except Exception as exc:
+        return jsonify({"error": f"PDF generation failed: {exc}"}), 500
+
+    hours_by_rate = {
+        rate_type: round(sum(float(item["hours"]) for item in items if item["rateType"] == rate_type), 2)
+        for rate_type in OT_RATE_TYPES
+    }
+    total_hours = round(sum(float(item["hours"]) for item in items), 2)
+    ot_data = {
+        "claimMonth": month_key,
+        "claimMonthEnd": month_end_start.strftime("%Y-%m") if month_end_start else None,
+        "totalHours": total_hours,
+        "hoursByRate": hours_by_rate,
+        "items": items,
+    }
+    worker_snapshot = {
+        "workerId": worker.get("workerId"),
+        "name": worker.get("name"),
+        "designation": worker.get("designation"),
+        "department": worker.get("department"),
+    }
+    start_iso = min(item["date"] for item in items)
+    end_iso = max(item["date"] for item in items)
+
+    execute(
+        """UPDATE submissions SET
+            start_date = %s, end_date = %s, duration_days = %s, reason = %s,
+            kpi_month = %s, application_date = %s, kpi_data = %s, worker_snapshot = %s,
+            pdf_file_name = %s, workbook_file_name = %s
+           WHERE id = %s""",
+        (start_iso, end_iso, len(items), f"{month_key} overtime claim", month_key,
+         application_iso, json.dumps(ot_data), json.dumps(worker_snapshot),
+         pdf_file_name, workbook_file_name, row["id"]),
+    )
+
+    new_row = query_one("SELECT * FROM submissions WHERE id = %s", (row["id"],))
+    return jsonify({"submission": _row_to_submission(new_row)}), 200
+
+
 @bp.post("/api/submissions/ot")
 @require_auth
 def create_ot_submission():

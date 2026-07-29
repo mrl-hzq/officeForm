@@ -17,8 +17,208 @@ const state = {
   selectedForm: "AL",
   kpiStep: 0,
   kpiValidationAttempted: false,
-  draftsRestored: false
+  draftsRestored: false,
+  editSubmission: null,
+  editFormKey: null
 };
+
+const formIdBySubmissionType = {
+  AL: "AL",
+  EL: "AL",
+  MC: "MC",
+  KPI: "KPI",
+  EXP: "EXP",
+  OT: "OT"
+};
+const formKeyBySubmissionType = {
+  AL: "al",
+  EL: "al",
+  MC: "mc",
+  KPI: "kpi",
+  EXP: "expense",
+  OT: "ot"
+};
+const generateButtons = () => ({
+  al: elements.generateButton,
+  mc: elements.mcGenerateButton,
+  kpi: elements.kpiGenerateButton,
+  expense: elements.expenseGenerateButton,
+  ot: elements.otGenerateButton
+});
+
+let editBanner = null;
+function ensureEditBanner() {
+  if (editBanner) return editBanner;
+  editBanner = document.createElement("div");
+  editBanner.className = "edit-banner hidden";
+  editBanner.innerHTML = `
+    <span class="edit-banner-text"></span>
+    <button class="edit-banner-cancel" type="button">Cancel edit</button>
+  `;
+  editBanner.querySelector(".edit-banner-cancel").addEventListener("click", cancelEdit);
+  const formsPanel = document.querySelector("#formsPanel");
+  formsPanel.insertBefore(editBanner, formsPanel.firstChild);
+  return editBanner;
+}
+
+function showEditBanner(submission) {
+  const banner = ensureEditBanner();
+  banner.querySelector(".edit-banner-text").textContent =
+    `Editing ${submission.formType} ${submission.formName || ""} (submitted ${submission.createdAt ? new Date(submission.createdAt).toLocaleString() : ""}). Submit to update.`;
+  banner.classList.remove("hidden");
+}
+
+function hideEditBanner() {
+  if (editBanner) editBanner.classList.add("hidden");
+}
+
+function startEdit(submission) {
+  if (!submission) return;
+  const formKey = formKeyBySubmissionType[submission.formType];
+  const formId = formIdBySubmissionType[submission.formType];
+  if (!formKey || !formId) return;
+  state.editSubmission = submission;
+  state.editFormKey = formKey;
+  const draftObj = submissionToDraft(submission, formKey);
+  drafts[formKey].restore(draftObj);
+  const buttons = generateButtons();
+  const btn = buttons[formKey];
+  if (btn) {
+    btn.dataset.originalLabel = btn.dataset.originalLabel || btn.textContent;
+    btn.textContent = `Update ${btn.dataset.originalLabel.replace(/^Generate /, "")}`;
+  }
+  selectForm(formId);
+  setActiveTab("formsPanel");
+  showEditBanner(submission);
+  setMessage(messageElForFormKey(formKey), `Editing existing ${submission.formType} submission. Make changes and submit to update.`, "info");
+}
+
+function cancelEdit() {
+  if (!state.editSubmission && !state.editFormKey) return;
+  const formKey = state.editFormKey;
+  state.editSubmission = null;
+  state.editFormKey = null;
+  const buttons = generateButtons();
+  const btn = formKey ? buttons[formKey] : null;
+  if (btn && btn.dataset.originalLabel) btn.textContent = btn.dataset.originalLabel;
+  hideEditBanner();
+  if (formKey) {
+    setMessage(messageElForFormKey(formKey), "Edit cancelled.", "info");
+  }
+}
+
+function clearEditAfterSubmit(formKey) {
+  state.editSubmission = null;
+  state.editFormKey = null;
+  const buttons = generateButtons();
+  const btn = formKey ? buttons[formKey] : null;
+  if (btn) {
+    setButtonLoading(btn, false);
+    if (btn.dataset.originalLabel) btn.textContent = btn.dataset.originalLabel;
+  }
+  hideEditBanner();
+}
+
+function messageElForFormKey(formKey) {
+  return {
+    al: elements.formMessage,
+    mc: elements.mcFormMessage,
+    kpi: elements.kpiFormMessage,
+    expense: elements.expenseFormMessage,
+    ot: elements.otFormMessage
+  }[formKey];
+}
+
+function isEditingForm(formKey) {
+  return !!state.editSubmission && state.editFormKey === formKey;
+}
+
+function submissionEditEndpoint() {
+  return `/api/submissions/${encodeURIComponent(state.editSubmission.id)}`;
+}
+
+function submissionToDraft(submission, formKey) {
+  if (formKey === "al") {
+    return {
+      startDate: submission.startDate,
+      endDate: submission.endDate,
+      leaveType: submission.leaveType || "annual",
+      reason: submission.reason || "",
+      halfDay: !!submission.isHalfDay && submission.startDate === submission.endDate,
+      halfDayPeriod: submission.halfDayPeriod || "AM",
+      removeEntitlement: !!(submission.leaveSummary && submission.leaveSummary.remove_entitlement)
+    };
+  }
+  if (formKey === "mc") {
+    return {
+      startDate: submission.startDate,
+      endDate: submission.endDate,
+      reason: submission.reason || ""
+    };
+  }
+  if (formKey === "kpi") {
+    const data = submission.kpiData || {};
+    const scores = {};
+    if (data.scores && typeof data.scores === "object") {
+      Object.entries(data.scores).forEach(([sectionKey, list]) => {
+        if (Array.isArray(list)) {
+          list.forEach((value, index) => {
+            scores[`${sectionKey}-${index}`] = value;
+          });
+        }
+      });
+    }
+    return {
+      month: submission.kpiMonth || "",
+      evaluatorName: data.evaluatorName || "",
+      taskList: data.taskList || "",
+      workerFeedback: data.workerFeedback || "",
+      trainingNeeds: data.trainingNeeds || "",
+      evaluatorFeedback: data.evaluatorFeedback || "",
+      scores,
+      comments: data.comments || {},
+      options: data.summaryOptions || {},
+      step: 0
+    };
+  }
+  if (formKey === "expense") {
+    const data = submission.expenseData || {};
+    const rows = (data.items || []).map(item => {
+      const row = {};
+      expenseColumns.forEach(col => {
+        const value = item[col.key];
+        row[col.key] = value === null || value === undefined ? "" : String(value);
+      });
+      return row;
+    });
+    return {
+      month: data.claimMonth || "",
+      monthEnd: data.claimMonthEnd || "",
+      site: data.site || "",
+      supervisorName: data.supervisorName || "",
+      advances: data.advances === null || data.advances === undefined ? "" : String(data.advances),
+      rows
+    };
+  }
+  if (formKey === "ot") {
+    const data = submission.otData || {};
+    const rows = (data.items || []).map(item => {
+      const row = {};
+      otColumns.forEach(col => {
+        if (col.key === "hours") return;
+        const value = item[col.key];
+        row[col.key] = value === null || value === undefined ? "" : String(value);
+      });
+      return row;
+    });
+    return {
+      month: data.claimMonth || "",
+      monthEnd: data.claimMonthEnd || "",
+      rows
+    };
+  }
+  return null;
+}
 
 document.documentElement.dataset.theme = state.theme;
 
@@ -653,6 +853,29 @@ function getCalendarType(item) {
 function setMessage(element, text, type = "") {
   element.textContent = text;
   element.className = `message ${type}`.trim();
+}
+
+function setButtonLoading(button, loading, loadingText) {
+  if (!button) return;
+  if (loading) {
+    if (button.dataset.loading === "true") return;
+    button.dataset.loading = "true";
+    if (!button.dataset.originalText) button.dataset.originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = "";
+    const spinner = document.createElement("span");
+    spinner.className = "button-spinner";
+    button.appendChild(spinner);
+    button.appendChild(document.createTextNode(loadingText || button.dataset.originalText));
+  } else {
+    if (button.dataset.loading !== "true") return;
+    button.dataset.loading = "false";
+    button.disabled = false;
+    if (button.dataset.originalText) {
+      button.textContent = button.dataset.originalText;
+      delete button.dataset.originalText;
+    }
+  }
 }
 
 function renderThemeButtons() {
@@ -1821,6 +2044,7 @@ function renderHistory() {
         <td>${new Date(item.createdAt).toLocaleString()}</td>
         <td><a href="${item.pdfUrl}" target="_blank" rel="noreferrer">Download</a></td>
         <td>
+          <button class="edit-button" type="button" data-edit-submission="${item.id}">Edit</button>
           <button class="danger-button" type="button" data-delete-submission="${item.id}">
             Delete
           </button>
@@ -1991,7 +2215,7 @@ elements.profileSetupForm.addEventListener("submit", async event => {
   event.preventDefault();
   if (!state.worker) return;
 
-  elements.saveProfileSetupButton.disabled = true;
+  setButtonLoading(elements.saveProfileSetupButton, true, "Saving...");
   setMessage(elements.profileSetupMessage, "Saving profile...");
 
   try {
@@ -2018,7 +2242,7 @@ elements.profileSetupForm.addEventListener("submit", async event => {
   } catch (error) {
     setMessage(elements.profileSetupMessage, error.message, "error");
   } finally {
-    elements.saveProfileSetupButton.disabled = false;
+    setButtonLoading(elements.saveProfileSetupButton, false);
   }
 });
 
@@ -2094,7 +2318,7 @@ elements.otherUploadForm.addEventListener("submit", async event => {
     return;
   }
 
-  elements.otherUploadButton.disabled = true;
+  setButtonLoading(elements.otherUploadButton, true, "Uploading...");
   setMessage(elements.otherAdminMessage, "Uploading PDF...");
 
   try {
@@ -2111,7 +2335,7 @@ elements.otherUploadForm.addEventListener("submit", async event => {
   } catch (error) {
     setMessage(elements.otherAdminMessage, error.message, "error");
   } finally {
-    elements.otherUploadButton.disabled = false;
+    setButtonLoading(elements.otherUploadButton, false);
   }
 });
 
@@ -2127,7 +2351,7 @@ elements.otherAdminRows.addEventListener("click", async event => {
     return;
   }
 
-  button.disabled = true;
+  setButtonLoading(button, true, "Removing...");
   setMessage(elements.otherAdminMessage, "Removing PDF...");
 
   try {
@@ -2139,7 +2363,7 @@ elements.otherAdminRows.addEventListener("click", async event => {
     setMessage(elements.otherAdminMessage, "PDF removed.", "success");
   } catch (error) {
     setMessage(elements.otherAdminMessage, error.message, "error");
-    button.disabled = false;
+    setButtonLoading(button, false);
   }
 });
 
@@ -2163,7 +2387,7 @@ elements.alForm.addEventListener("submit", async event => {
     return;
   }
 
-  elements.generateButton.disabled = true;
+  setButtonLoading(elements.generateButton, true, "Generating...");
   setMessage(elements.formMessage, "Generating PDF and syncing spreadsheet...");
 
   try {
@@ -2177,23 +2401,25 @@ elements.alForm.addEventListener("submit", async event => {
       removeEntitlement: elements.removeEntitlementCheckbox.checked,
       reason
     };
-    const { submission } = await api("/api/submissions/al", {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
+    const editing = isEditingForm("al");
+    const { submission } = await api(
+      editing ? submissionEditEndpoint() : "/api/submissions/al",
+      { method: editing ? "PUT" : "POST", body: JSON.stringify(payload) }
+    );
     setMessage(
       elements.formMessage,
-      `PDF generated: ${submission.pdfFileName}`,
+      editing ? `Updated: ${submission.pdfFileName}` : `PDF generated: ${submission.pdfFileName}`,
       "success"
     );
     drafts.al.clear();
+    clearEditAfterSubmit("al");
     await refreshWorkerProfile({ resetDates: false });
     await loadSubmissions();
     window.open(submission.pdfUrl, "_blank", "noreferrer");
   } catch (error) {
     setMessage(elements.formMessage, error.message, "error");
   } finally {
-    elements.generateButton.disabled = false;
+    setButtonLoading(elements.generateButton, false);
   }
 });
 
@@ -2221,7 +2447,7 @@ elements.mcForm.addEventListener("submit", async event => {
     return;
   }
 
-  elements.mcGenerateButton.disabled = true;
+  setButtonLoading(elements.mcGenerateButton, true, "Generating...");
   setMessage(elements.mcFormMessage, "Generating PDF and syncing spreadsheet...");
 
   try {
@@ -2231,22 +2457,24 @@ elements.mcForm.addEventListener("submit", async event => {
       endDate: calculation.endDate,
       sicknessReason
     };
-    const { submission } = await api("/api/submissions/mc", {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
+    const editing = isEditingForm("mc");
+    const { submission } = await api(
+      editing ? submissionEditEndpoint() : "/api/submissions/mc",
+      { method: editing ? "PUT" : "POST", body: JSON.stringify(payload) }
+    );
     setMessage(
       elements.mcFormMessage,
-      `PDF generated: ${submission.pdfFileName}`,
+      editing ? `Updated: ${submission.pdfFileName}` : `PDF generated: ${submission.pdfFileName}`,
       "success"
     );
     drafts.mc.clear();
+    clearEditAfterSubmit("mc");
     await loadSubmissions();
     window.open(submission.pdfUrl, "_blank", "noreferrer");
   } catch (error) {
     setMessage(elements.mcFormMessage, error.message, "error");
   } finally {
-    elements.mcGenerateButton.disabled = false;
+    setButtonLoading(elements.mcGenerateButton, false);
   }
 });
 
@@ -2305,7 +2533,7 @@ elements.kpiForm.addEventListener("submit", async event => {
     return;
   }
 
-  elements.kpiGenerateButton.disabled = true;
+  setButtonLoading(elements.kpiGenerateButton, true, "Generating...");
   setMessage(elements.kpiFormMessage, "Generating PDF...");
 
   try {
@@ -2321,16 +2549,18 @@ elements.kpiForm.addEventListener("submit", async event => {
       trainingNeeds: elements.kpiTrainingNeedsInput.value.trim(),
       evaluatorFeedback: elements.kpiEvaluatorFeedbackInput.value.trim()
     };
-    const { submission } = await api("/api/submissions/kpi", {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
+    const editing = isEditingForm("kpi");
+    const { submission } = await api(
+      editing ? submissionEditEndpoint() : "/api/submissions/kpi",
+      { method: editing ? "PUT" : "POST", body: JSON.stringify(payload) }
+    );
     setMessage(
       elements.kpiFormMessage,
-      `PDF generated: ${submission.pdfFileName}`,
+      editing ? `Updated: ${submission.pdfFileName}` : `PDF generated: ${submission.pdfFileName}`,
       "success"
     );
     drafts.kpi.clear();
+    clearEditAfterSubmit("kpi");
     state.kpiValidationAttempted = false;
     renderKpiWizard();
     await loadSubmissions();
@@ -2338,7 +2568,7 @@ elements.kpiForm.addEventListener("submit", async event => {
   } catch (error) {
     setMessage(elements.kpiFormMessage, error.message, "error");
   } finally {
-    elements.kpiGenerateButton.disabled = false;
+    setButtonLoading(elements.kpiGenerateButton, false);
   }
 });
 
@@ -2383,26 +2613,28 @@ elements.expenseForm.addEventListener("submit", async event => {
     return;
   }
 
-  elements.expenseGenerateButton.disabled = true;
+  setButtonLoading(elements.expenseGenerateButton, true, "Generating...");
   setMessage(elements.expenseFormMessage, "Generating PDF...");
 
   try {
-    const { submission } = await api("/api/submissions/expenses", {
-      method: "POST",
-      body: JSON.stringify(calculation)
-    });
+    const editing = isEditingForm("expense");
+    const { submission } = await api(
+      editing ? submissionEditEndpoint() : "/api/submissions/expenses",
+      { method: editing ? "PUT" : "POST", body: JSON.stringify(calculation) }
+    );
     setMessage(
       elements.expenseFormMessage,
-      `PDF generated: ${submission.pdfFileName}`,
+      editing ? `Updated: ${submission.pdfFileName}` : `PDF generated: ${submission.pdfFileName}`,
       "success"
     );
     drafts.expense.clear();
+    clearEditAfterSubmit("expense");
     await loadSubmissions();
     window.open(submission.pdfUrl, "_blank", "noreferrer");
   } catch (error) {
     setMessage(elements.expenseFormMessage, error.message, "error");
   } finally {
-    elements.expenseGenerateButton.disabled = false;
+    setButtonLoading(elements.expenseGenerateButton, false);
   }
 });
 
@@ -2448,26 +2680,28 @@ elements.otForm.addEventListener("submit", async event => {
     return;
   }
 
-  elements.otGenerateButton.disabled = true;
+  setButtonLoading(elements.otGenerateButton, true, "Generating...");
   setMessage(elements.otFormMessage, "Generating PDF...");
 
   try {
-    const { submission } = await api("/api/submissions/ot", {
-      method: "POST",
-      body: JSON.stringify(calculation)
-    });
+    const editing = isEditingForm("ot");
+    const { submission } = await api(
+      editing ? submissionEditEndpoint() : "/api/submissions/ot",
+      { method: editing ? "PUT" : "POST", body: JSON.stringify(calculation) }
+    );
     setMessage(
       elements.otFormMessage,
-      `PDF generated: ${submission.pdfFileName}`,
+      editing ? `Updated: ${submission.pdfFileName}` : `PDF generated: ${submission.pdfFileName}`,
       "success"
     );
     drafts.ot.clear();
+    clearEditAfterSubmit("ot");
     await loadSubmissions();
     window.open(submission.pdfUrl, "_blank", "noreferrer");
   } catch (error) {
     setMessage(elements.otFormMessage, error.message, "error");
   } finally {
-    elements.otGenerateButton.disabled = false;
+    setButtonLoading(elements.otGenerateButton, false);
   }
 });
 
@@ -2478,7 +2712,7 @@ elements.profileForm.addEventListener("submit", async event => {
     return;
   }
 
-  elements.saveProfileButton.disabled = true;
+  setButtonLoading(elements.saveProfileButton, true, "Saving...");
   setMessage(elements.profileMessage, "Saving profile and syncing spreadsheet...");
 
   try {
@@ -2507,17 +2741,24 @@ elements.profileForm.addEventListener("submit", async event => {
   } catch (error) {
     setMessage(elements.profileMessage, error.message, "error");
   } finally {
-    elements.saveProfileButton.disabled = false;
+    setButtonLoading(elements.saveProfileButton, false);
   }
 });
 
 elements.profileEmploymentTypeInput.addEventListener("change", updateEmploymentDateFields);
 
 elements.historyRows.addEventListener("click", async event => {
+  const editButton = event.target.closest("[data-edit-submission]");
+  if (editButton) {
+    const submission = state.submissions.find(item => item.id === editButton.dataset.editSubmission);
+    if (submission) startEdit(submission);
+    return;
+  }
   const button = event.target.closest("[data-delete-submission]");
   if (!button || !state.worker) {
     return;
   }
+  cancelEdit();
 
   const submissionId = button.dataset.deleteSubmission;
   const submission = state.submissions.find(item => item.id === submissionId);
@@ -2536,7 +2777,7 @@ elements.historyRows.addEventListener("click", async event => {
     return;
   }
 
-  button.disabled = true;
+  setButtonLoading(button, true, "Deleting...");
   setMessage(elements.historyMessage, "Deleting request and updating spreadsheet...");
 
   try {
@@ -2548,7 +2789,7 @@ elements.historyRows.addEventListener("click", async event => {
     setMessage(elements.historyMessage, "Request deleted and generated files removed.", "success");
   } catch (error) {
     setMessage(elements.historyMessage, error.message, "error");
-    button.disabled = false;
+    setButtonLoading(button, false);
   }
 });
 
