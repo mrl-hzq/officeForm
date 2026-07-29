@@ -131,11 +131,12 @@ def append_calendar_entry(target_date: date, label: str) -> bool:
         if not a1:
             return False
         existing = _read_cell(sh, a1)
-        lines = [ln.strip() for ln in existing.split("\n")]
-        if label in lines:
+        lines = [ln for ln in existing.split("\n") if ln.strip()]
+        stripped = [ln.strip() for ln in lines]
+        if label in stripped:
             return False
-        new_value = (existing + "\n" + label) if existing else label
-        _write_cell(sh, a1, new_value)
+        lines.append(label)
+        _write_cell(sh, a1, "\n".join(lines))
         return True
     except Exception as exc:
         logger.warning("Google Sheets sync failed for %s (%s): %s", target_date, label, exc)
@@ -163,13 +164,12 @@ def remove_calendar_line(target_date: date, label: str) -> bool:
         if not a1:
             return False
         existing = _read_cell(sh, a1)
-        lines = existing.split("\n")
+        lines = [ln for ln in existing.split("\n") if ln.strip()]
         stripped = [ln.strip() for ln in lines]
         if label not in stripped:
             return False
         kept = [ln for ln in lines if ln.strip() != label]
-        new_value = "\n".join(kept)
-        _write_cell(sh, a1, new_value)
+        _write_cell(sh, a1, "\n".join(kept))
         return True
     except Exception as exc:
         logger.warning("Google Sheets removal failed for %s (%s): %s", target_date, label, exc)
@@ -228,7 +228,7 @@ def replace_calendar_line(target_date: date, old_label: str, new_label: str) -> 
         if not a1:
             return False
         existing = _read_cell(sh, a1)
-        lines = existing.split("\n")
+        lines = [ln for ln in existing.split("\n") if ln.strip()]
         found = False
         new_lines = []
         for ln in lines:
