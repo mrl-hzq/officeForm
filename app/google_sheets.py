@@ -183,6 +183,31 @@ def date_range(start: date, end: date):
         d += timedelta(days=1)
 
 
+def cell_has_line(target_date: date, label: str) -> bool | None:
+    """Check whether the target day cell already contains `label` as an exact full line.
+
+    Returns True if present, False if absent, None if the cell/month block could not be
+    located or an error occurred. Never raises.
+    """
+    cfg = current_app.config
+    if not cfg.get("GOOGLE_SHEETS_ENABLED"):
+        return None
+    if not cfg.get("GOOGLE_CREDENTIALS_PATH") or not cfg.get("GOOGLE_SHEET_ID"):
+        return None
+    try:
+        gc = _client()
+        sh = gc.open_by_key(cfg["GOOGLE_SHEET_ID"]).worksheet(cfg["GOOGLE_SHEET_TAB"])
+        a1 = _locate_target_cell(sh, target_date)
+        if not a1:
+            return None
+        existing = _read_cell(sh, a1)
+        lines = [ln.strip() for ln in existing.split("\n")]
+        return label in lines
+    except Exception as exc:
+        logger.warning("Google Sheets cell_has_line failed for %s (%s): %s", target_date, label, exc)
+        return None
+
+
 def replace_calendar_line(target_date: date, old_label: str, new_label: str) -> bool:
     """Rename an exact full-line match from `old_label` to `new_label` in the target day cell.
 
