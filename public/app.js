@@ -2834,7 +2834,7 @@ function restoreAllDrafts() {
 });
 
 // ----- Patch notes: fetch latest merged PRs from GitHub once per hour -----
-const PATCHNOTES_CACHE_KEY = "patchnotesCache_v1";
+const PATCHNOTES_CACHE_KEY = "patchnotesCache_v2";
 const PATCHNOTES_TTL_MS = 60 * 60 * 1000;
 
 function formatPrDate(iso) {
@@ -2900,7 +2900,8 @@ async function loadPatchnotes() {
     const prs = await res.json();
     const merged = (Array.isArray(prs) ? prs : [])
       .filter(pr => pr && pr.merged_at)
-      .slice(0, 5);
+      .sort((a, b) => new Date(b.merged_at) - new Date(a.merged_at))
+      .slice(0, 3);
     renderPatchnotes(merged, listEl);
     try {
       localStorage.setItem(PATCHNOTES_CACHE_KEY, JSON.stringify({ fetchedAt: now, items: merged }));
