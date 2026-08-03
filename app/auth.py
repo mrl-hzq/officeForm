@@ -160,6 +160,39 @@ def login():
     return jsonify({"token": token, "worker": _get_auth_worker(worker_id)})
 
 
+@bp.post("/api/auth/service-login")
+def service_login():
+    """Mint a worker JWT for the trusted, same-host MCP service."""
+    configured_key = current_app.config.get("MCP_SERVICE_LOGIN_KEY", "")
+    provided_key = request.headers.get("X-MCP-Service-Key", "")
+    key_matches = hmac.compare_digest(provided_key, configured_key)
+    local_request = request.remote_addr in {"127.0.0.1", "::1"}
+    if not configured_key or not key_matches or not local_request:
+        return jsonify({"error": "Service key required."}), 401
+
+    body = request.get_json(silent=True) or {}
+    raw_worker_id = body.get("workerId")
+    worker_id = normalize_worker_id(raw_worker_id) if isinstance(raw_worker_id, str) else ""
+    if not worker_id:
+        return jsonify({"error": "Worker ID is required."}), 400
+
+    validation_error = _validate_worker_id(worker_id)
+    if validation_error:
+        return jsonify({"error": validation_error}), 400
+
+    current_app.logger.info(
+        "MCP service-login worker_id=%s remote_addr=%s",
+        worker_id,
+        request.remote_addr,
+    )
+    user = query_one("SELECT id FROM users WHERE worker_id = %s", (worker_id,))
+    if not user:
+        return jsonify({"error": "No account found for this Worker ID. Please register first."}), 404
+
+    token = _make_token(worker_id)
+    return jsonify({"token": token, "worker": _get_auth_worker(worker_id)})
+
+
 def _get_auth_worker(worker_id: str) -> dict:
     from .workers import _get_worker_enriched
 

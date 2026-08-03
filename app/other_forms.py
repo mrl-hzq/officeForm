@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from urllib.parse import quote
 
+import jwt
 from flask import Blueprint, current_app, jsonify, request
 from werkzeug.utils import secure_filename
 
@@ -16,6 +18,14 @@ ALLOWED_EXTENSIONS = {
     ".txt", ".csv",
     ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
     ".zip",
+}
+
+# Extensions viewable through ONLYOFFICE Document Server, mapped to its
+# documentType values (word processor, spreadsheet, presentation).
+ONLYOFFICE_VIEWABLE = {
+    ".doc": "word", ".docx": "word", ".txt": "word",
+    ".xls": "cell", ".xlsx": "cell", ".csv": "cell",
+    ".ppt": "slide", ".pptx": "slide",
 }
 
 
@@ -60,6 +70,67 @@ def _safe_existing_path(file_name: str) -> Path:
 @require_auth
 def other_forms():
     return jsonify({"forms": _list_other_forms()})
+
+
+@bp.get("/api/others/<path:file_name>/viewer-config")
+@require_auth
+def other_form_viewer_config(file_name: str):
+    """Build a signed ONLYOFFICE DocEditor config for view-only preview."""
+    if not current_app.config.get("ONLYOFFICE_ENABLED"):
+        return jsonify({"error": "ONLYOFFICE viewing is not enabled."}), 404
+
+    try:
+        target = _safe_existing_path(file_name)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    if not target.exists() or not target.is_file():
+        return jsonify({"error": "Form not found."}), 404
+
+    ext = target.suffix.lower()
+    document_type = ONLYOFFICE_VIEWABLE.get(ext)
+    if not document_type:
+        return jsonify({"error": "This file type is not viewable in the browser."}), 400
+
+    stat = target.stat()
+    # The key identifies the cached document; it must change on every edit
+    # so viewers never see a stale copy.
+    key = hashlib.sha256(
+        f"{target.name}:{stat.st_mtime_ns}:{stat.st_size}".encode()
+    ).hexdigest()[:20]
+
+    file_url = f"{current_app.config['ONLYOFFICE_INTERNAL_URL']}/others/{quote(target.name)}"
+    config = {
+        "width": "100%",
+        "height": "100%",
+        "document": {
+            "fileType": ext.lstrip("."),
+            "key": key,
+            "title": target.name,
+            "url": file_url,
+            "permissions": {
+                "edit": False,
+                "download": True,
+                "print": True,
+                "copy": True,
+            },
+        },
+        "documentType": document_type,
+        "editorConfig": {
+            "mode": "view",
+            "lang": "en",
+        },
+        "type": "desktop",
+    }
+    # ONLYOFFICE requires the whole config signed as the JWT payload.
+    config["token"] = jwt.encode(
+        config, current_app.config["ONLYOFFICE_JWT_SECRET"], algorithm="HS256"
+    )
+
+    return jsonify({
+        "apiUrl": f"{current_app.config['ONLYOFFICE_PUBLIC_URL']}/web-apps/apps/api/documents/api.js",
+        "config": config,
+    })
 
 
 @bp.post("/api/admin/others")

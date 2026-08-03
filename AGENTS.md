@@ -71,10 +71,6 @@ docker compose ps
 docker image inspect officeform-web:latest
 ```
 
-## Platform Note
-
-- This project is a web-only Flask application. There is no Android, iOS, or mobile packaging. Do not suggest or pursue any mobile wrapper approach.
-
 ## Database
 
 - Config is read from `.env` by `app/config.py`.
@@ -166,7 +162,19 @@ Native Windows PDF generation needs LibreOffice available to the bridge path for
 - During profile setup, if employment type is `Permanent`, employment start/end date pickers are disabled and auto-filled to the current year range.
 - If employment type is `Contract`, those dates are editable.
 - The KPI tab tracks monthly KPI submissions for the current year.
-- The Others tab shows uploaded PDFs from `others/`; admin role exposes upload/delete controls.
+- The Others tab shows uploaded files from `others/`; admin role exposes upload/delete controls.
+- Office files (doc/docx/xls/xlsx/ppt/pptx/csv/txt) open view-only in the browser through ONLYOFFICE Docs; PDFs and images use a native iframe preview; anything else shows a download link.
+
+## ONLYOFFICE Viewer
+
+- `docker-compose.yml` has an `onlyoffice` service (`onlyoffice/documentserver`, published on `9980`) with `JWT_SECRET` and `ALLOW_PRIVATE_IP_ADDRESS=true` (required so it can fetch files from the private web container address).
+- `.env` controls it: `ONLYOFFICE_ENABLED`, `ONLYOFFICE_PUBLIC_URL` (browser -> ONLYOFFICE), `ONLYOFFICE_INTERNAL_URL` (ONLYOFFICE -> Flask file download), `ONLYOFFICE_JWT_SECRET`. Compose overrides `ONLYOFFICE_INTERNAL_URL` to `http://web:3000`; native Flask needs `http://host.docker.internal:3000`.
+- `ONLYOFFICE_JWT_SECRET` must equal the container's `JWT_SECRET`.
+- Backend: `GET /api/others/<file>/viewer-config` in `app/other_forms.py` returns `{ apiUrl, config }` where `config` is a signed (`token`) ONLYOFFICE DocEditor config with `editorConfig.mode = "view"`. The document `key` is derived from filename + mtime + size so cache invalidates on re-upload.
+- Frontend: `public/app.js::openOnlyOfficeViewer` lazy-loads `apiUrl` (`.../web-apps/apps/api/documents/api.js`) and mounts `DocsAPI.DocEditor` into `#otherOnlyOfficeViewer`. Failures fall back to the "preview unavailable" download link.
+- View-only: no `callbackUrl` is configured, so no edits are saved back.
+- The `/others/<filename>` file route is unauthenticated so the document server can fetch files.
+- Community Edition limits: 20 concurrent editing connections, 20 live viewers.
 
 ## Backend File Map
 
@@ -176,7 +184,7 @@ Native Windows PDF generation needs LibreOffice available to the bridge path for
 - `app/auth.py`: register, login, JWT decorator.
 - `app/workers.py`: profile read/update and AL balance enrichment.
 - `app/submissions.py`: submissions, shared calendar feed, PDF generation calls.
-- `app/other_forms.py`: authenticated Others PDF listing plus admin upload/delete.
+- `app/other_forms.py`: authenticated Others file listing, ONLYOFFICE viewer config, plus admin upload/delete.
 - `app/pdf_service.py`: wrapper around form PDF generation scripts.
 - `app/utils.py`: shared parsing, leave, KPI, and profile helpers.
 
@@ -230,3 +238,19 @@ The product goal is an internal collaborative office form system:
 - Worker sees own history.
 - Calendar acts as a collaborative AL/EL/MC visibility space for the team.
 - Others acts as a shared PDF reference space, with admin-managed uploads.
+- History tab allows workers (or admins) to print any generated PDF form directly to the office printer (`RICOH MP C2004ex PCL 6` at `192.168.5.115:9100`).
+
+## Office Printer Integration
+
+- History tab includes a **Print** button for each submission row.
+- Endpoint: `POST /api/submissions/<submission_id>/print` (`require_auth`). User must be the owner of the submission or an `admin`.
+- Backend print service: `app/print_service.py`.
+- Primary print method: RAW TCP socket streaming directly to `PRINTER_HOST:PRINTER_PORT` (Port 9100). Works inside Docker containers and native Windows without host print drivers.
+- Config settings in `.env`:
+  - `PRINTER_ENABLED=1`
+  - `PRINTER_HOST=192.168.5.115`
+  - `PRINTER_PORT=9100`
+  - `PRINTER_NAME=RICOH MP C2004ex PCL 6`
+  - `PRINTER_METHOD=auto` (options: `socket`, `command`, `auto`)
+  - `PRINTER_TIMEOUT=10`
+
