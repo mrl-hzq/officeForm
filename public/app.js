@@ -614,6 +614,7 @@ const elements = {
   otherPdfTitle: document.querySelector("#otherPdfTitle"),
   otherPdfOpenLink: document.querySelector("#otherPdfOpenLink"),
   otherPdfViewer: document.querySelector("#otherPdfViewer"),
+  otherOnlyOfficeViewer: document.querySelector("#otherOnlyOfficeViewer"),
   otherViewerWrapper: document.querySelector("#otherViewerWrapper"),
   otherPreviewUnavailable: document.querySelector("#otherPreviewUnavailable"),
   otherPreviewOpenLink: document.querySelector("#otherPreviewOpenLink"),
@@ -1016,6 +1017,7 @@ function renderOtherForms() {
     elements.otherPdfViewer.removeAttribute("src");
     elements.otherPdfViewer.classList.remove("hidden");
     elements.otherPreviewUnavailable.classList.add("hidden");
+    destroyOnlyOfficeEditor();
     renderOtherAdminRows();
     return;
   }
@@ -1040,6 +1042,67 @@ function renderOtherForms() {
 }
 
 const previewableExtensions = new Set([".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"]);
+const onlyOfficeExtensions = new Set([".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".csv"]);
+
+let onlyOfficeEditor = null;
+let onlyOfficeApiPromise = null;
+let onlyOfficeApiUrl = null;
+let onlyOfficeRequestId = 0;
+
+function destroyOnlyOfficeEditor() {
+  onlyOfficeRequestId += 1;
+  if (onlyOfficeEditor && typeof onlyOfficeEditor.destroyEditor === "function") {
+    onlyOfficeEditor.destroyEditor();
+  }
+  onlyOfficeEditor = null;
+  elements.otherOnlyOfficeViewer.innerHTML = "";
+  elements.otherOnlyOfficeViewer.classList.add("hidden");
+}
+
+function loadOnlyOfficeApi(apiUrl) {
+  if (window.DocsAPI && onlyOfficeApiUrl === apiUrl) {
+    return Promise.resolve();
+  }
+  if (!onlyOfficeApiPromise || onlyOfficeApiUrl !== apiUrl) {
+    onlyOfficeApiUrl = apiUrl;
+    onlyOfficeApiPromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = apiUrl;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Failed to load the ONLYOFFICE viewer."));
+      document.head.appendChild(script);
+    });
+    onlyOfficeApiPromise.catch(() => {
+      onlyOfficeApiPromise = null;
+    });
+  }
+  return onlyOfficeApiPromise;
+}
+
+async function openOnlyOfficeViewer(selectedForm) {
+  const requestId = ++onlyOfficeRequestId;
+  const container = elements.otherOnlyOfficeViewer;
+  container.classList.remove("hidden");
+  try {
+    const data = await api(`/api/others/${encodeURIComponent(selectedForm.fileName)}/viewer-config`);
+    await loadOnlyOfficeApi(data.apiUrl);
+    if (requestId !== onlyOfficeRequestId) {
+      return;
+    }
+    const placeholder = document.createElement("div");
+    placeholder.id = "otherOnlyOfficePlaceholder";
+    container.innerHTML = "";
+    container.appendChild(placeholder);
+    onlyOfficeEditor = new DocsAPI.DocEditor(placeholder.id, data.config);
+  } catch (error) {
+    if (requestId !== onlyOfficeRequestId) {
+      return;
+    }
+    container.innerHTML = "";
+    container.classList.add("hidden");
+    elements.otherPreviewUnavailable.classList.remove("hidden");
+  }
+}
 
 function getOtherFormExtension(form) {
   const fileName = form?.fileName || "";
@@ -1056,6 +1119,7 @@ function selectOtherForm(formId) {
   const fileUrl = getOtherFormUrl(selectedForm);
   const ext = getOtherFormExtension(selectedForm);
   const canPreview = previewableExtensions.has(ext);
+  const canOnlyOffice = onlyOfficeExtensions.has(ext);
 
   elements.otherFormCards.querySelectorAll("[data-other-form-id]").forEach(card => {
     card.classList.toggle("active", card.dataset.otherFormId === selectedForm.id);
@@ -1064,10 +1128,16 @@ function selectOtherForm(formId) {
   elements.otherPdfOpenLink.href = fileUrl;
   elements.otherPreviewOpenLink.href = fileUrl;
 
+  destroyOnlyOfficeEditor();
   if (canPreview) {
     elements.otherPdfViewer.src = fileUrl;
     elements.otherPdfViewer.classList.remove("hidden");
     elements.otherPreviewUnavailable.classList.add("hidden");
+  } else if (canOnlyOffice) {
+    elements.otherPdfViewer.removeAttribute("src");
+    elements.otherPdfViewer.classList.add("hidden");
+    elements.otherPreviewUnavailable.classList.add("hidden");
+    openOnlyOfficeViewer(selectedForm);
   } else {
     elements.otherPdfViewer.removeAttribute("src");
     elements.otherPdfViewer.classList.add("hidden");
@@ -2044,11 +2114,13 @@ function renderHistory() {
         <td>${new Date(item.createdAt).toLocaleString()}</td>
         <td><a href="${item.pdfUrl}" target="_blank" rel="noreferrer">Download</a></td>
         <td>
+          <button class="print-button" type="button" data-print-submission="${item.id}">Print</button>
           <button class="edit-button" type="button" data-edit-submission="${item.id}">Edit</button>
           <button class="danger-button" type="button" data-delete-submission="${item.id}">
             Delete
           </button>
         </td>
+
       </tr>
     `)
     .join("");
@@ -2748,7 +2820,27 @@ elements.profileForm.addEventListener("submit", async event => {
 elements.profileEmploymentTypeInput.addEventListener("change", updateEmploymentDateFields);
 
 elements.historyRows.addEventListener("click", async event => {
+  const printButton = event.target.closest("[data-print-submission]");
+  if (printButton) {
+    const submissionId = printButton.dataset.printSubmission;
+    setButtonLoading(printButton, true, "Printing...");
+    setMessage(elements.historyMessage, "Sending document to office printer...");
+
+    try {
+      const response = await api(`/api/submissions/${encodeURIComponent(submissionId)}/print`, {
+        method: "POST"
+      });
+      setMessage(elements.historyMessage, response.message || "Sent to printer successfully.", "success");
+    } catch (error) {
+      setMessage(elements.historyMessage, error.message || "Failed to print document.", "error");
+    } finally {
+      setButtonLoading(printButton, false);
+    }
+    return;
+  }
+
   const editButton = event.target.closest("[data-edit-submission]");
+
   if (editButton) {
     const submission = state.submissions.find(item => item.id === editButton.dataset.editSubmission);
     if (submission) startEdit(submission);

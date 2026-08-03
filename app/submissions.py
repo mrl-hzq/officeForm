@@ -35,8 +35,10 @@ from .utils import (
 )
 from . import pdf_service
 from . import google_sheets
+from . import print_service
 
 bp = Blueprint("submissions", __name__)
+
 
 
 def _sheets_label(form_type: str, display_name: str, is_half_day: bool, half_day_period: str | None) -> str:
@@ -252,6 +254,44 @@ def delete_submission(submission_id: str):
     execute("DELETE FROM submissions WHERE id = %s", (submission_id,))
     _remove_submission_from_sheets(row)
     return jsonify({"deleted": _row_to_submission(row)})
+
+
+@bp.post("/api/submissions/<submission_id>/print")
+@require_auth
+def print_submission(submission_id: str):
+    row = query_one(
+        "SELECT * FROM submissions WHERE id = %s",
+        (submission_id,),
+    )
+    if not row:
+        return jsonify({"error": "Submission not found."}), 404
+
+    if row.get("worker_id") != g.worker_id and getattr(g, "user_role", "worker") != "admin":
+        return jsonify({"error": "You do not have permission to print this submission."}), 403
+
+    pdf_file_name = row.get("pdf_file_name")
+    if not pdf_file_name:
+        return jsonify({"error": "No PDF file associated with this submission."}), 400
+
+    pdf_dir = current_app.config["PDF_DIR"]
+    pdf_path = pdf_dir / pdf_file_name
+
+    if not pdf_path.is_file():
+        try:
+            from . import _regenerate_pdf
+            _regenerate_pdf(f"pdfs/{pdf_file_name}")
+        except Exception as exc:
+            current_app.logger.warning("PDF regeneration exception for printing: %s", exc)
+
+    if not pdf_path.is_file():
+        return jsonify({"error": f"PDF file '{pdf_file_name}' does not exist and could not be generated."}), 404
+
+    success, msg = print_service.send_to_printer(pdf_path)
+    if not success:
+        return jsonify({"error": msg}), 500
+
+    return jsonify({"success": True, "message": msg})
+
 
 
 @bp.post("/api/submissions/al")

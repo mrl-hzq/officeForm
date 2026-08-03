@@ -10,18 +10,18 @@ services:
       - APP_PORT=3000
       # Choose exactly one complete database target block.
       # Option A: local MySQL service on the Windows host (active)
-      # - DB_SERVER=host.docker.internal
-      # - DB_PORT=3306
-      # - DB_SCHEMA=officeform
-      # - DB_USER=root
-      # - DB_PASSWORD=root
-
-      # Option B: MySQL container in this Compose stack
-      - DB_SERVER=db
+      - DB_SERVER=host.docker.internal
       - DB_PORT=3306
       - DB_SCHEMA=officeform
-      - DB_USER=officeform
-      - DB_PASSWORD=myadmin
+      - DB_USER=root
+      - DB_PASSWORD=root
+
+      # Option B: MySQL container in this Compose stack
+      # - DB_SERVER=db
+      # - DB_PORT=3306
+      # - DB_SCHEMA=officeform
+      # - DB_USER=officeform
+      # - DB_PASSWORD=myadmin
 
       # - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-secret-change-in-production}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-officeformterplaingsecret}
@@ -30,17 +30,37 @@ services:
       - GOOGLE_CREDENTIALS_PATH=/app/secrets/officeform-503804-a6af5cb4b3a4.json
       - GOOGLE_SHEET_ID=${GOOGLE_SHEET_ID:-1A1g37tUffmaVuj8PIcGU1-V0iq5fYpk3dVQVcXlcL4U}
       - GOOGLE_SHEET_TAB=${GOOGLE_SHEET_TAB:-2026}
+      # ONLYOFFICE in-browser viewer for Office files in the Others tab
+      - ONLYOFFICE_ENABLED=${ONLYOFFICE_ENABLED:-0}
+      - ONLYOFFICE_PUBLIC_URL=${ONLYOFFICE_PUBLIC_URL:-http://localhost:9980}
+      - ONLYOFFICE_INTERNAL_URL=http://web:3000
+      - ONLYOFFICE_JWT_SECRET=${ONLYOFFICE_JWT_SECRET:-officeform-onlyoffice-secret}
+      # MCP server service-login shared secret. Must equal the MCP server's
+      # MCP_SERVICE_LOGIN_KEY in .env. Empty default = endpoint fails closed.
+      - MCP_SERVICE_LOGIN_KEY=${MCP_SERVICE_LOGIN_KEY:-}
     ports:
       # Server
-      - "80:3000"
+      # - "80:3000"
       # Local
-      # - "3000:3000"
+      - "3000:3000"
     volumes:
       # - ./generated:/app/generated
       # - ./formOri:/app/formOri:ro
       # - ./others:/app/others
       # - ./secrets:/app/secrets:ro
       - ./:/app
+
+  onlyoffice:
+    image: onlyoffice/documentserver:latest
+    environment:
+      - JWT_SECRET=${ONLYOFFICE_JWT_SECRET:-officeform-onlyoffice-secret}
+      # Required so the document server can download files from the private
+      # web container address (ONLYOFFICE_INTERNAL_URL).
+      - ALLOW_PRIVATE_IP_ADDRESS=true
+      - TZ=Asia/Kuala_Lumpur
+    ports:
+      - "9980:80"
+    restart: unless-stopped
 
   db:
     image: mysql:8.4

@@ -121,7 +121,37 @@ The old JSON files in `data/` are migration/backup inputs, not the active backen
 - KPI submissions are tracked by month in the Profile tab for the current year.
 - Personal generated records are saved in MySQL and shown in History.
 - Calendar shows shared AL/EL/MC visibility across users.
-- Others shows shared uploaded PDFs, with upload/delete controls for admin users.
+- Others shows shared uploaded files, with upload/delete controls for admin users.
+- PDFs and images preview directly in the browser; Office files (doc/docx/xls/xlsx/ppt/pptx/csv/txt) preview in the browser through a self-hosted ONLYOFFICE Document Server container when `ONLYOFFICE_ENABLED=1`.
+
+## ONLYOFFICE Office File Viewer
+
+The Others tab can render Office files in the browser (view-only) using
+ONLYOFFICE Docs running as the `onlyoffice` service in `docker-compose.yml`
+(published on port `9980`).
+
+Config in `.env`:
+
+```dotenv
+ONLYOFFICE_ENABLED=1
+ONLYOFFICE_PUBLIC_URL=http://localhost:9980
+ONLYOFFICE_INTERNAL_URL=http://host.docker.internal:3000
+ONLYOFFICE_JWT_SECRET=officeform-onlyoffice-secret
+```
+
+- `ONLYOFFICE_PUBLIC_URL`: how the user's browser reaches ONLYOFFICE.
+- `ONLYOFFICE_INTERNAL_URL`: how the ONLYOFFICE container reaches the Flask app
+  to download files. For the Compose web container this is overridden to
+  `http://web:3000` automatically; for native `python app_entry.py` keep
+  `http://host.docker.internal:3000`.
+- `ONLYOFFICE_JWT_SECRET` must match the `JWT_SECRET` of the `onlyoffice`
+  container (both default to the same value from `.env`).
+- Set `ONLYOFFICE_ENABLED=0` to disable; Office files then fall back to the
+  download link.
+
+The backend endpoint `GET /api/others/<file>/viewer-config` returns the signed
+editor config. Viewing is view-only; no edits are saved back.
+
 
 ## Google Sheets Calendar Sync
 
@@ -181,3 +211,23 @@ Unsynced rows per worker:
 ```bash
 sudo docker exec officeform-db-1 mysql -uroot -proot officeform -e "SELECT worker_id, COUNT(*) AS unsynced FROM submissions WHERE form_type IN ('AL','EL','MC') AND sheets_synced_at IS NULL GROUP BY worker_id;"
 ```
+
+## Office Printer Direct Printing
+
+The History tab includes a **Print** button for each submission, allowing users to send print commands directly from the server to the network office printer (`RICOH MP C2004ex PCL 6`).
+
+Config in `.env`:
+
+```dotenv
+PRINTER_ENABLED=1
+PRINTER_HOST=192.168.5.115
+PRINTER_PORT=9100
+PRINTER_NAME=RICOH MP C2004ex PCL 6
+PRINTER_METHOD=auto
+PRINTER_TIMEOUT=10
+```
+
+- When a worker clicks **Print**, Flask connects to `PRINTER_HOST:PRINTER_PORT` over RAW TCP socket (Port 9100) and streams the PDF directly to the printer.
+- Works natively and inside Docker containers without requiring host printer drivers inside Docker.
+- Endpoint: `POST /api/submissions/<id>/print` (requires authentication; accessible by the form owner or admins).
+
