@@ -33,7 +33,8 @@ services:
       # ONLYOFFICE in-browser viewer for Office files in the Others tab
       - ONLYOFFICE_ENABLED=${ONLYOFFICE_ENABLED:-0}
       - ONLYOFFICE_PUBLIC_URL=${ONLYOFFICE_PUBLIC_URL:-http://localhost:9980}
-      - ONLYOFFICE_INTERNAL_URL=http://web:3000
+      - ONLYOFFICE_INTERNAL_URL=${ONLYOFFICE_INTERNAL_URL:-http://web:3000}
+
       - ONLYOFFICE_JWT_SECRET=${ONLYOFFICE_JWT_SECRET:-officeform-onlyoffice-secret}
       # MCP server service-login shared secret. Must equal the MCP server's
       # MCP_SERVICE_LOGIN_KEY in .env. Empty default = endpoint fails closed.
