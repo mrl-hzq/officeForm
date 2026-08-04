@@ -23,8 +23,8 @@ def run_calc_pdf_export(
     output_pdf_path = Path(output_pdf_path).resolve()
 
     working_workbook_path.parent.mkdir(parents=True, exist_ok=True)
-    output_pdf_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(template_path, working_workbook_path)
+    if not working_workbook_path.exists():
+        shutil.copyfile(template_path, working_workbook_path)
 
     bridge_python = os.environ.get("LIBREOFFICE_PYTHON", "/usr/bin/python3")
     if not Path(bridge_python).exists():

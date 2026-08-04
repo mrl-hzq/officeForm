@@ -6,6 +6,7 @@ python-dotenv==1.0.1
 gunicorn==23.0.0
 cryptography
 pypdf
+openpyxl
 gspread==6.1.2
 google-auth==2.31.0
 google-auth-oauthlib==1.2.1

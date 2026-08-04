@@ -325,6 +325,11 @@ def _apply_action(document, action: dict) -> None:
     if kind == "cell":
         cell = _target_cell(sheet, action["address"])
         _set_number_format(document, cell, action.get("numberFormat"))
+        if action.get("fontSize"):
+            try:
+                cell.CharHeight = float(action["fontSize"])
+            except Exception:
+                pass
         value = action.get("value")
         value_type = action.get("valueType", "string")
         if value_type == "formula":
@@ -338,6 +343,11 @@ def _apply_action(document, action: dict) -> None:
     elif kind == "cell_format":
         cell = _target_cell(sheet, action["address"])
         _set_number_format(document, cell, action.get("numberFormat"))
+        if action.get("fontSize"):
+            try:
+                cell.CharHeight = float(action["fontSize"])
+            except Exception:
+                pass
         _set_alignment(cell, action.get("alignment"))
         _set_vertical_alignment(cell, action.get("verticalAlignment"))
     elif kind == "range_align":

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import shutil
 import tempfile
 from copy import copy
@@ -7,6 +8,139 @@ from datetime import date, datetime
 from pathlib import Path
 
 from scripts.libreoffice_export import run_calc_pdf_export
+
+
+def _calculate_text_font_size(text: str, base_chars_per_line: int = 40, max_height: float = 85.0) -> float:
+    if not text or not text.strip():
+        return 11.0
+    lines = text.splitlines()
+    font_sizes = [11.0, 10.5, 10.0, 9.5, 9.0, 8.5, 8.0, 7.5, 7.0, 6.5, 6.0, 5.5, 5.0]
+    for fs in font_sizes:
+        chars_per_line = max(1, int(base_chars_per_line * (11.0 / fs)))
+        total_lines = 0
+        for line in lines:
+            if not line:
+                total_lines += 1
+            else:
+                total_lines += math.ceil(len(line) / chars_per_line)
+        needed_height = total_lines * (fs * 1.30)
+        if needed_height <= max_height:
+            return fs
+    return 5.0
+
+
+def _format_kpi_feedback_cell(sheet, cell_address: str, text: str, max_height: float) -> None:
+    import openpyxl
+    if not text or not text.strip():
+        sheet[cell_address].value = ""
+        return
+    cleaned = text.replace("\r\n", "\n").strip()
+    fs = _calculate_text_font_size(cleaned, base_chars_per_line=85, max_height=max_height)
+    cell = sheet[cell_address]
+    cell.value = cleaned
+    cell.font = openpyxl.styles.Font(name="Calibri", size=fs)
+    cell.alignment = openpyxl.styles.Alignment(wrap_text=True, vertical="top", horizontal="left")
+
+
+def _unprotect_and_prepare_kpi_workbook(
+    template_path: Path,
+    working_workbook_path: Path,
+    task_list: str,
+    worker_feedback: str = "",
+    training_needs: str = "",
+    evaluator_feedback: str = "",
+) -> None:
+    working_workbook_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(template_path)
+        for sheet in wb.worksheets:
+            sheet.protection.sheet = False
+
+        sheet = wb["MASTER"]
+        thin_side = openpyxl.styles.Side(border_style="thin", color="000000")
+        no_side = openpyxl.styles.Side(border_style=None)
+
+        if task_list and task_list.strip():
+            cleaned = task_list.replace("\r\n", "\n").strip()
+            blocks = [b.strip() for b in cleaned.split("\n\n") if b.strip()]
+
+            if len(blocks) >= 2 or len(cleaned.splitlines()) >= 6:
+                if len(blocks) < 2:
+                    lines = [l.strip() for l in cleaned.splitlines() if l.strip()]
+                    blocks = ["\n".join(lines[i:i + 2]) for i in range(0, len(lines), 2)]
+
+                mid = (len(blocks) + 1) // 2
+                left_text = "\n\n".join(blocks[:mid])
+                right_text = "\n\n".join(blocks[mid:])
+
+                fs_left = _calculate_text_font_size(left_text, base_chars_per_line=40)
+                fs_right = _calculate_text_font_size(right_text, base_chars_per_line=38)
+                chosen_fs = min(fs_left, fs_right)
+
+                try:
+                    sheet.unmerge_cells("A9:I10")
+                except Exception:
+                    pass
+                sheet.merge_cells("A9:D10")
+                sheet.merge_cells("E9:I10")
+
+                for r in range(9, 11):
+                    for c in range(1, 5):
+                        l_b = thin_side if c == 1 else no_side
+                        t_b = thin_side if r == 9 else no_side
+                        r_b = no_side
+                        b_b = thin_side if r == 10 else no_side
+                        sheet.cell(row=r, column=c).border = openpyxl.styles.Border(left=l_b, top=t_b, right=r_b, bottom=b_b)
+
+                for r in range(9, 11):
+                    for c in range(5, 10):
+                        l_b = no_side
+                        t_b = thin_side if r == 9 else no_side
+                        r_b = thin_side if c == 9 else no_side
+                        b_b = thin_side if r == 10 else no_side
+                        sheet.cell(row=r, column=c).border = openpyxl.styles.Border(left=l_b, top=t_b, right=r_b, bottom=b_b)
+
+                cell_left = sheet["A9"]
+                cell_left.value = left_text
+                cell_left.font = openpyxl.styles.Font(name="Calibri", size=chosen_fs)
+                cell_left.alignment = openpyxl.styles.Alignment(wrap_text=True, vertical="top", horizontal="left")
+
+                cell_right = sheet["E9"]
+                cell_right.value = right_text
+                cell_right.font = openpyxl.styles.Font(name="Calibri", size=chosen_fs)
+                cell_right.alignment = openpyxl.styles.Alignment(wrap_text=True, vertical="top", horizontal="left")
+            else:
+                for r in range(9, 11):
+                    for c in range(1, 10):
+                        l_b = thin_side if c == 1 else no_side
+                        t_b = thin_side if r == 9 else no_side
+                        r_b = thin_side if c == 9 else no_side
+                        b_b = thin_side if r == 10 else no_side
+                        sheet.cell(row=r, column=c).border = openpyxl.styles.Border(left=l_b, top=t_b, right=r_b, bottom=b_b)
+
+                chosen_fs = _calculate_text_font_size(cleaned, base_chars_per_line=85)
+                cell = sheet["A9"]
+                cell.value = cleaned
+                cell.font = openpyxl.styles.Font(name="Calibri", size=chosen_fs)
+                cell.alignment = openpyxl.styles.Alignment(wrap_text=True, vertical="top", horizontal="left")
+        else:
+            for r in range(9, 11):
+                for c in range(1, 10):
+                    l_b = thin_side if c == 1 else no_side
+                    t_b = thin_side if r == 9 else no_side
+                    r_b = thin_side if c == 9 else no_side
+                    b_b = thin_side if r == 10 else no_side
+                    sheet.cell(row=r, column=c).border = openpyxl.styles.Border(left=l_b, top=t_b, right=r_b, bottom=b_b)
+            sheet["A9"].value = ""
+
+        _format_kpi_feedback_cell(sheet, "A106", worker_feedback, max_height=80.0)
+        _format_kpi_feedback_cell(sheet, "A110", training_needs, max_height=50.0)
+        _format_kpi_feedback_cell(sheet, "A117", evaluator_feedback, max_height=80.0)
+
+        wb.save(working_workbook_path)
+    except Exception:
+        shutil.copyfile(template_path, working_workbook_path)
 
 XL_TYPE_PDF = 0
 XL_PAPER_A4 = 9
@@ -113,6 +247,11 @@ def _apply_excel_alignment(target, alignment: str | None) -> None:
 def _apply_excel_cell_action(workbook, action: dict) -> None:
     sheet = workbook.Worksheets(action.get("sheet", "MASTER"))
     target = sheet.Range(action["address"])
+    if action.get("fontSize"):
+        try:
+            target.Font.Size = action["fontSize"]
+        except Exception:
+            pass
     if action.get("numberFormat"):
         try:
             target.NumberFormat = action["numberFormat"]
@@ -249,13 +388,24 @@ def _run_excel_kpi_export(
     working_workbook_path: Path,
     output_pdf_path: Path,
     actions: list[dict],
+    task_list: str,
+    worker_feedback: str = "",
+    training_needs: str = "",
+    evaluator_feedback: str = "",
 ) -> None:
     import pythoncom
     import win32com.client
 
     working_workbook_path.parent.mkdir(parents=True, exist_ok=True)
     output_pdf_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(template_path, working_workbook_path)
+    _unprotect_and_prepare_kpi_workbook(
+        template_path,
+        working_workbook_path,
+        task_list,
+        worker_feedback=worker_feedback,
+        training_needs=training_needs,
+        evaluator_feedback=evaluator_feedback,
+    )
 
     pythoncom.CoInitialize()
     excel = None
@@ -345,7 +495,19 @@ def _run_libreoffice_kpi_export(
     working_workbook_path: Path,
     output_pdf_path: Path,
     actions: list[dict],
+    task_list: str,
+    worker_feedback: str = "",
+    training_needs: str = "",
+    evaluator_feedback: str = "",
 ) -> None:
+    _unprotect_and_prepare_kpi_workbook(
+        template_path,
+        working_workbook_path,
+        task_list,
+        worker_feedback=worker_feedback,
+        training_needs=training_needs,
+        evaluator_feedback=evaluator_feedback,
+    )
     with tempfile.TemporaryDirectory(dir=output_pdf_path.parent) as temp_dir:
         source_pdf_path = Path(temp_dir) / output_pdf_path.name
         run_calc_pdf_export(
@@ -389,7 +551,6 @@ def generate_kpi_pdf(
     _set_merged_value(actions, "F5", department)
     _set_merged_value(actions, "C6", evaluator_name)
     _set_merged_value(actions, "F6", month_label)
-    _set_merged_value(actions, "A9", task_list)
 
     for section_key, cell_addresses in KPI_SCORE_CELLS.items():
         section_scores = scores.get(section_key) or []
@@ -414,9 +575,6 @@ def generate_kpi_pdf(
             "numberFormat": "@",
         })
 
-    _set_merged_value(actions, "A106", worker_feedback)
-    _set_merged_value(actions, "A110", training_needs)
-    _set_merged_value(actions, "A117", evaluator_feedback)
     _set_merged_date_text(actions, "G113", application_date)
     actions.append({
         "kind": "page_setup",
@@ -443,6 +601,10 @@ def generate_kpi_pdf(
             working_workbook_path=working_workbook_path,
             output_pdf_path=output_pdf_path,
             actions=actions,
+            task_list=task_list,
+            worker_feedback=worker_feedback,
+            training_needs=training_needs,
+            evaluator_feedback=evaluator_feedback,
         )
     except Exception:
         _run_libreoffice_kpi_export(
@@ -450,4 +612,8 @@ def generate_kpi_pdf(
             working_workbook_path=working_workbook_path,
             output_pdf_path=output_pdf_path,
             actions=actions,
+            task_list=task_list,
+            worker_feedback=worker_feedback,
+            training_needs=training_needs,
+            evaluator_feedback=evaluator_feedback,
         )
