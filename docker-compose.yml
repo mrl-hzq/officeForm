@@ -32,10 +32,10 @@ services:
       - GOOGLE_SHEET_TAB=${GOOGLE_SHEET_TAB:-2026}
       # ONLYOFFICE in-browser viewer for Office files in the Others tab
       - ONLYOFFICE_ENABLED=${ONLYOFFICE_ENABLED:-0}
-      - ONLYOFFICE_PUBLIC_URL=${ONLYOFFICE_PUBLIC_URL:-http://localhost:9980}
+      - ONLYOFFICE_PUBLIC_URL=${ONLYOFFICE_PUBLIC_URL:-http://192.168.4.236:9980}
       - ONLYOFFICE_INTERNAL_URL=${ONLYOFFICE_INTERNAL_URL:-http://web:3000}
 
-      - ONLYOFFICE_JWT_SECRET=${ONLYOFFICE_JWT_SECRET:-officeform-onlyoffice-secret}
+      - ONLYOFFICE_JWT_SECRET=${ONLYOFFICE_JWT_SECRET:-officeformterplaingsecret}
       # MCP server service-login shared secret. Must equal the MCP server's
       # MCP_SERVICE_LOGIN_KEY in .env. Empty default = endpoint fails closed.
       - MCP_SERVICE_LOGIN_KEY=${MCP_SERVICE_LOGIN_KEY:-}
@@ -54,7 +54,7 @@ services:
   onlyoffice:
     image: onlyoffice/documentserver:latest
     environment:
-      - JWT_SECRET=${ONLYOFFICE_JWT_SECRET:-officeform-onlyoffice-secret}
+      - JWT_SECRET=${ONLYOFFICE_JWT_SECRET:-officeformterplaingsecret}
       # Required so the document server can download files from the private
       # web container address (ONLYOFFICE_INTERNAL_URL).
       - ALLOW_PRIVATE_IP_ADDRESS=true
