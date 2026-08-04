@@ -9,7 +9,7 @@ Web-based office form system for Worker ID registration/login, profile setup, AL
 - Entry point: `app_entry.py`
 - Database: MySQL via PyMySQL
 - Auth: JWT with Worker ID plus a deployment-wide shared password
-- Template filling: LibreOffice headless UNO actions for AL/MC/Expense/OT; KPI tries Excel COM first and falls back to LibreOffice
+- Template filling: LibreOffice headless UNO actions for AL/MC/Expense/OT; KPI pre-formats workbook via `openpyxl` (dynamic font scaling, 50/50 task split, feedback text wrapping) then exports via Excel COM (preferred on Windows) or LibreOffice Calc headless fallback (Docker / Linux)
 - PDF output: Excel-template export to PDF using mapped workbook templates
 - Generated files: `generated/pdfs/` and `generated/workbooks/`
 
@@ -119,6 +119,11 @@ The old JSON files in `data/` are migration/backup inputs, not the active backen
 - AL/EL leave form, MC form, KPI form, Expense Claim form, and Overtime Claim form are ready for testing.
 - AL and EL reduce annual leave balance. Unpaid, Other, and MC do not.
 - KPI submissions are tracked by month in the Profile tab for the current year.
+- **KPI PDF Form Formatting**:
+  - **Senarai Tugasan**: Multi-block task lists (e.g. monthly entries) automatically split into a balanced 50/50 left/right 2-column layout inside a single outer border box; single-paragraph entries render full-width.
+  - **Dynamic Font Scaling**: Text font size automatically scales down (to 5.0pt) based on content line count and height constraints to prevent text spilling past bottom cell borders.
+  - **MAKLUMBALAS Feedback Section**: Multi-line word wrapping (`wrap_text=True`) and top-left alignment enabled for Worker Feedback (**PEKERJA**), Training Needs (**Keperluan Latihan**), and Evaluator Feedback (**PENILAI**) fields.
+  - **LibreOffice Calc & Excel COM Compatibility**: Preserves openpyxl pre-formatted cell structures and perimeter borders across both Windows Excel COM and Docker LibreOffice headless exports.
 - Personal generated records are saved in MySQL and shown in History.
 - Calendar shows shared AL/EL/MC visibility across users.
 - Others shows shared uploaded files, with upload/delete controls for admin users.
