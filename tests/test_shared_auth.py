@@ -12,7 +12,7 @@ class SharedPasswordAuthTests(unittest.TestCase):
         self.app.config.update(
             TESTING=True,
             AUTH_SHARED_PASSWORD="test-shared-password",
-            JWT_SECRET_KEY="test-jwt-secret",
+            JWT_SECRET_KEY="test-jwt-secret-key-32-bytes-long-123456789",
         )
         self.client = self.app.test_client()
 

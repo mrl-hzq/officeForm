@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "python app_entry.py",
-    "check": "python -B -c \"import pathlib; files=list(pathlib.Path('app').glob('*.py'))+[pathlib.Path('app_entry.py')]+list(pathlib.Path('scripts').glob('*.py')); [compile(p.read_text(encoding='utf-8'), str(p), 'exec') for p in files]; print('Python syntax OK')\""
+    "check": "python -B -c \"import pathlib; files=list(pathlib.Path('app').glob('*.py'))+[pathlib.Path('app_entry.py')]+list(pathlib.Path('scripts').glob('*.py')); [compile(p.read_text(encoding='utf-8'), str(p), 'exec') for p in files]; print('Python syntax OK')\"",
+    "test": "pytest"
   }
 }

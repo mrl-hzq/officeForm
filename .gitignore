@@ -11,3 +11,11 @@ others/*
 
 officeform-web.tar
 
+.coverage
+coverage.xml
+junit-reports/
+
+# Office lock files
+~$*.xlsx
+~$*.xls
+
