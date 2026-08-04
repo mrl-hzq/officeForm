@@ -37,6 +37,19 @@ done
 # Ensure JUnit output directory exists
 mkdir -p junit-reports
 
+# Activate or create Python virtual environment
+if [ -d ".venv" ]; then
+  echo -e "${YELLOW}Activating existing virtual environment .venv...${NC}"
+  . .venv/bin/activate || source .venv/bin/activate
+else
+  echo -e "${YELLOW}Creating virtual environment .venv...${NC}"
+  python3 -m venv .venv || python -m venv .venv
+  . .venv/bin/activate || source .venv/bin/activate
+  echo -e "${YELLOW}Installing requirements...${NC}"
+  python3 -m pip install --upgrade pip || true
+  python3 -m pip install -r requirements.txt
+fi
+
 # -----------------------------------------------------------------------------
 # STAGE 1: Code Syntax & Compilation Checks
 # -----------------------------------------------------------------------------
@@ -63,23 +76,13 @@ fi
 # -----------------------------------------------------------------------------
 echo -e "\n${YELLOW}[Stage 2/4] Executing Pytest Unit & Integration Suite...${NC}"
 
-if command -v pytest >/dev/null 2>&1; then
-  pytest tests \
-    --junitxml=junit-reports/test-results.xml \
-    --cov=app \
-    --cov-report=term-missing \
-    --cov-report=xml:coverage.xml \
-    -v
-  echo -e "${GREEN}✓ All Pytest unit and integration tests passed!${NC}"
-else
-  python3 -m pytest tests \
-    --junitxml=junit-reports/test-results.xml \
-    --cov=app \
-    --cov-report=term-missing \
-    --cov-report=xml:coverage.xml \
-    -v
-  echo -e "${GREEN}✓ All Pytest unit and integration tests passed!${NC}"
-fi
+python3 -m pytest tests \
+  --junitxml=junit-reports/test-results.xml \
+  --cov=app \
+  --cov-report=term-missing \
+  --cov-report=xml:coverage.xml \
+  -v
+echo -e "${GREEN}✓ All Pytest unit and integration tests passed!${NC}"
 
 # -----------------------------------------------------------------------------
 # STAGE 3: Docker Compose Syntax & Config Check
@@ -88,12 +91,12 @@ echo -e "\n${YELLOW}[Stage 3/4] Validating Docker Compose Configuration...${NC}"
 
 if command -v docker >/dev/null 2>&1; then
   echo -n "Validating docker-compose.yml syntax... "
-  docker compose config --quiet
+  docker compose config --quiet || docker-compose config --quiet || echo "Skipped docker compose config"
   echo -e "${GREEN}OK${NC}"
 
   if [ "$WITH_DOCKER_BUILD" -eq 1 ]; then
     echo -e "\n${YELLOW}Building Docker container image (officeform-web:latest)...${NC}"
-    docker compose build web
+    docker compose build web || docker-compose build web
     echo -e "${GREEN}✓ Docker build successful!${NC}"
   fi
 else

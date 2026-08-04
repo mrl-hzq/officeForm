@@ -21,7 +21,11 @@ COPY app app
 COPY public public
 COPY scripts scripts
 COPY formOri formOri
+COPY tests tests
 COPY app_entry.py .
+COPY pytest.ini .
+
+
 
 RUN mkdir -p generated/pdfs generated/workbooks others
 

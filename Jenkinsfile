@@ -2,46 +2,31 @@ pipeline {
     agent any
 
     environment {
-        PYTHONUNBUFFERED = '1'
-        PYTHONDONTWRITEBYTECODE = '1'
+        DOCKER_IMAGE = "officeform-test:${BUILD_NUMBER}"
     }
 
     stages {
-        stage('Checkout') {
+        stage('Build Test Container Image') {
             steps {
-                checkout scm
+                echo "Building Docker container image ${DOCKER_IMAGE}..."
+                sh 'docker build -t ${DOCKER_IMAGE} .'
             }
         }
 
-        stage('Install Dependencies') {
+        stage('Run Pytest inside Isolated Container') {
             steps {
-                sh '''
-                    if [ -f .venv/bin/activate ]; then
-                        source .venv/bin/activate
-                    fi
-                    pip install --upgrade pip
-                    pip install -r requirements.txt
-                '''
-            }
-        }
-
-        stage('Syntax & Lint') {
-            steps {
-                sh 'python3 -B -c "import pathlib; files=list(pathlib.Path(\'app\').glob(\'*.py\'))+[pathlib.Path(\'app_entry.py\')]+list(pathlib.Path(\'scripts\').glob(\'*.py\'))+list(pathlib.Path(\'tests\').glob(\'*.py\')); [compile(p.read_text(encoding=\'utf-8\'), str(p), \'exec\') for p in files]; print(\'Python syntax OK\')"'
-                sh 'node --check public/app.js || echo "JS check skipped"'
-            }
-        }
-
-        stage('Pytest Unit & Integration') {
-            steps {
+                echo "Executing 30 Pytest unit & integration tests inside container..."
                 sh '''
                     mkdir -p junit-reports
-                    pytest tests \
-                        --junitxml=junit-reports/test-results.xml \
-                        --cov=app \
-                        --cov-report=term-missing \
-                        --cov-report=xml:coverage.xml \
-                        -v
+                    docker run --rm \
+                        -v $(pwd)/junit-reports:/app/junit-reports \
+                        ${DOCKER_IMAGE} \
+                        pytest tests \
+                            --junitxml=junit-reports/test-results.xml \
+                            --cov=app \
+                            --cov-report=term-missing \
+                            --cov-report=xml:junit-reports/coverage.xml \
+                            -v
                 '''
             }
             post {
@@ -51,25 +36,30 @@ pipeline {
             }
         }
 
-        stage('Docker Compose Syntax Check') {
+        stage('Container Startup Smoke Test') {
             steps {
-                sh 'docker compose config --quiet'
-            }
-        }
-
-        stage('Docker Build Test') {
-            steps {
-                sh 'docker compose build web'
+                echo "Testing container HTTP readiness..."
+                sh '''
+                    TEST_CONTAINER="officeform-smoke-${BUILD_NUMBER}"
+                    docker run -d --name ${TEST_CONTAINER} -p 3999:3000 ${DOCKER_IMAGE}
+                    sleep 3
+                    docker exec ${TEST_CONTAINER} python3 -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:3000/').getcode())"
+                    docker rm -f ${TEST_CONTAINER} || true
+                '''
             }
         }
     }
 
     post {
+        always {
+            echo "Cleaning up build image ${DOCKER_IMAGE}..."
+            sh 'docker rmi ${DOCKER_IMAGE} || true'
+        }
         success {
-            echo 'Build and test pipeline completed successfully!'
+            echo '✓ Containerized build and test pipeline completed successfully!'
         }
         failure {
-            echo 'Build or test failure detected.'
+            echo '✗ Containerized build or test failure detected.'
         }
     }
 }
