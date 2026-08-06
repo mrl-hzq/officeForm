@@ -832,6 +832,48 @@
       </section>
     </main>
 
+    <!-- Print Options Modal -->
+    <div id="printOptionsModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="printModalTitle">
+      <div class="modal-card">
+        <header class="modal-header">
+          <div>
+            <p class="eyebrow">Office Printer</p>
+            <h3 id="printModalTitle">Print Document</h3>
+          </div>
+          <button id="closePrintModalButton" class="modal-close" type="button" aria-label="Close">&times;</button>
+        </header>
+        <div class="modal-body">
+          <p class="modal-description">Select color mode for printing to RICOH MP C2004ex:</p>
+          <div class="color-mode-options">
+            <label class="color-option">
+              <input type="radio" name="printColorMode" value="grayscale" checked>
+              <div class="option-card">
+                <span class="option-icon">🖨️</span>
+                <div class="option-info">
+                  <strong>Grayscale / Black &amp; White</strong>
+                  <small>Prints in black &amp; white (saves color toner)</small>
+                </div>
+              </div>
+            </label>
+            <label class="color-option">
+              <input type="radio" name="printColorMode" value="color">
+              <div class="option-card">
+                <span class="option-icon">🎨</span>
+                <div class="option-info">
+                  <strong>Full Color</strong>
+                  <small>Prints with original colors</small>
+                </div>
+              </div>
+            </label>
+          </div>
+        </div>
+        <footer class="modal-footer">
+          <button id="cancelPrintButton" class="ghost-button" type="button">Cancel</button>
+          <button id="confirmPrintButton" class="primary-button" type="button">Print Now</button>
+        </footer>
+      </div>
+    </div>
+
     <script src="/app.js"></script>
   </body>
 </html>
