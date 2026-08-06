@@ -171,6 +171,7 @@ def _row_to_submission(row: dict) -> dict:
         "halfDayPeriod": row.get("half_day_period"),
         "reason": row.get("reason"),
         "kpiMonth": row.get("kpi_month"),
+        "kpiYear": int(row["kpi_month"].split("-")[0]) if row.get("kpi_month") and "-" in str(row.get("kpi_month")) else None,
         "applicationDate": row.get("application_date").isoformat() if row.get("application_date") else None,
         "kpiData": _load(row.get("kpi_data")),
         "expenseData": _load(row.get("kpi_data")) if row.get("form_type") == "EXP" else None,

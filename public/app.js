@@ -1995,7 +1995,11 @@ function renderKpiTracker() {
 
   const monthlyEntries = new Map(
     state.submissions
-      .filter(item => item.formType === "KPI" && Number(item.kpiYear) === year)
+      .filter(item => {
+        if (item.formType !== "KPI" || !item.kpiMonth) return false;
+        const itemYear = item.kpiYear || Number(item.kpiMonth.split("-")[0]);
+        return Number(itemYear) === year;
+      })
       .map(item => [item.kpiMonth, item])
   );
 
