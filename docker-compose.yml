@@ -63,6 +63,12 @@ services:
       - "9980:80"
     restart: unless-stopped
 
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: officeform_tunnel
+    restart: unless-stopped
+    command: tunnel --url http://web:3000
+
   db:
     image: mysql:8.4
     profiles:
