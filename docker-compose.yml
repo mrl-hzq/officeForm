@@ -10,18 +10,18 @@ services:
       - APP_PORT=3000
       # Choose exactly one complete database target block.
       # Option A: local MySQL service on the Windows host (active)
-      - DB_SERVER=host.docker.internal
-      - DB_PORT=3306
-      - DB_SCHEMA=officeform
-      - DB_USER=root
-      - DB_PASSWORD=root
-
-      # Option B: MySQL container in this Compose stack
-      # - DB_SERVER=db
+      # - DB_SERVER=host.docker.internal
       # - DB_PORT=3306
       # - DB_SCHEMA=officeform
-      # - DB_USER=officeform
-      # - DB_PASSWORD=myadmin
+      # - DB_USER=root
+      # - DB_PASSWORD=root
+
+      # Option B: MySQL container in this Compose stack
+      - DB_SERVER=db
+      - DB_PORT=3306
+      - DB_SCHEMA=officeform
+      - DB_USER=officeform
+      - DB_PASSWORD=myadmin
 
       # - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-secret-change-in-production}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-officeformterplaingsecret}
@@ -41,9 +41,9 @@ services:
       - MCP_SERVICE_LOGIN_KEY=${MCP_SERVICE_LOGIN_KEY:-}
     ports:
       # Server
-      # - "80:3000"
+      - "80:3000"
       # Local
-      - "3000:3000"
+      # - "3000:3000"
     volumes:
       # - ./generated:/app/generated
       # - ./formOri:/app/formOri:ro
