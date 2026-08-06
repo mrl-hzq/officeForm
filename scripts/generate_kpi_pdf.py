@@ -154,7 +154,7 @@ MARGIN_POINTS = 18
 PDF_SLOT_GUTTER_POINTS = 14
 PDF_SLOT_PADDING_POINTS = 18
 KPI_LAYOUT_SHEET_NAME = "_KPI_PDF_LAYOUT"
-KPI_MASTER_PRINT_RANGES = ("A1:I25", "A26:I40", "A41:I68", "A69:I83", "A84:I124")
+KPI_MASTER_PRINT_RANGES = ("A41:I68", "A69:I83", "A84:I124")
 KPI_GUIDE_PRINT_RANGES = ("A1:E50", "A51:E88")
 
 KPI_SCORE_CELLS = {
@@ -335,8 +335,7 @@ def _export_kpi_two_pages_per_sheet(workbook, master_sheet, guide_sheet, output_
     layout.Cells.Clear()
     layout.ResetAllPageBreaks()
     source_pages = [
-        *[(master_sheet, source_range) for source_range in KPI_MASTER_PRINT_RANGES],
-        *[(guide_sheet, source_range) for source_range in KPI_GUIDE_PRINT_RANGES],
+        (master_sheet, source_range) for source_range in KPI_MASTER_PRINT_RANGES
     ]
 
     for column_index in range(1, 27):
@@ -464,11 +463,19 @@ def _impose_pdf_two_pages_per_sheet(source_pdf_path: Path, output_pdf_path: Path
     output_height = min(first_width, first_height)
     slot_width = (output_width - PDF_SLOT_GUTTER_POINTS - (PDF_SLOT_PADDING_POINTS * 2)) / 2
     slot_height = output_height - (PDF_SLOT_PADDING_POINTS * 2)
-    source_order = _kpi_source_page_order(len(reader.pages))
+    raw_pages = len(reader.pages)
+    if raw_pages >= 5:
+        source_order = [2, 3, 4]
+    elif raw_pages >= 3:
+        source_order = list(range(raw_pages - 3, raw_pages))
+    else:
+        source_order = list(range(raw_pages))
 
     for output_index in range(0, len(source_order), 2):
         output_page = PageObject.create_blank_page(width=output_width, height=output_height)
         for slot_index, source_index in enumerate(source_order[output_index:output_index + 2]):
+            if source_index >= len(reader.pages):
+                continue
             source_page = copy(reader.pages[source_index])
             source_page.transfer_rotation_to_content()
             source_width = float(source_page.mediabox.width)
@@ -617,3 +624,22 @@ def generate_kpi_pdf(
             training_needs=training_needs,
             evaluator_feedback=evaluator_feedback,
         )
+
+    _ensure_kpi_pdf_max_2_pages(output_pdf_path)
+
+
+def _ensure_kpi_pdf_max_2_pages(output_pdf_path: Path) -> None:
+    try:
+        from pypdf import PdfReader, PdfWriter
+        if not output_pdf_path.is_file():
+            return
+        reader = PdfReader(str(output_pdf_path))
+        if len(reader.pages) > 2:
+            writer = PdfWriter()
+            for page in reader.pages[:2]:
+                writer.add_page(page)
+            with output_pdf_path.open("wb") as handle:
+                writer.write(handle)
+    except Exception:
+        pass
+

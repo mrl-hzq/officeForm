@@ -19,7 +19,9 @@ const state = {
   kpiValidationAttempted: false,
   draftsRestored: false,
   editSubmission: null,
-  editFormKey: null
+  editFormKey: null,
+  pendingPrintSubmissionId: null,
+  pendingPrintButton: null
 };
 
 const formIdBySubmissionType = {
@@ -623,7 +625,11 @@ const elements = {
   otherUploadInput: document.querySelector("#otherUploadInput"),
   otherUploadButton: document.querySelector("#otherUploadButton"),
   otherAdminRows: document.querySelector("#otherAdminRows"),
-  otherAdminMessage: document.querySelector("#otherAdminMessage")
+  otherAdminMessage: document.querySelector("#otherAdminMessage"),
+  printOptionsModal: document.querySelector("#printOptionsModal"),
+  closePrintModalButton: document.querySelector("#closePrintModalButton"),
+  cancelPrintButton: document.querySelector("#cancelPrintButton"),
+  confirmPrintButton: document.querySelector("#confirmPrintButton")
 };
 
 const profileSetupStandardFields = [
@@ -2819,23 +2825,77 @@ elements.profileForm.addEventListener("submit", async event => {
 
 elements.profileEmploymentTypeInput.addEventListener("change", updateEmploymentDateFields);
 
-elements.historyRows.addEventListener("click", async event => {
-  const printButton = event.target.closest("[data-print-submission]");
-  if (printButton) {
-    const submissionId = printButton.dataset.printSubmission;
-    setButtonLoading(printButton, true, "Printing...");
-    setMessage(elements.historyMessage, "Sending document to office printer...");
+function openPrintModal(submissionId, printButton) {
+  state.pendingPrintSubmissionId = submissionId;
+  state.pendingPrintButton = printButton;
+  if (elements.printOptionsModal) {
+    elements.printOptionsModal.classList.remove("hidden");
+  }
+}
+
+function closePrintModal() {
+  state.pendingPrintSubmissionId = null;
+  state.pendingPrintButton = null;
+  if (elements.printOptionsModal) {
+    elements.printOptionsModal.classList.add("hidden");
+  }
+}
+
+if (elements.closePrintModalButton) {
+  elements.closePrintModalButton.addEventListener("click", closePrintModal);
+}
+if (elements.cancelPrintButton) {
+  elements.cancelPrintButton.addEventListener("click", closePrintModal);
+}
+if (elements.printOptionsModal) {
+  elements.printOptionsModal.addEventListener("click", event => {
+    if (event.target === elements.printOptionsModal) {
+      closePrintModal();
+    }
+  });
+}
+
+if (elements.confirmPrintButton) {
+  elements.confirmPrintButton.addEventListener("click", async () => {
+    const submissionId = state.pendingPrintSubmissionId;
+    const printButton = state.pendingPrintButton;
+    if (!submissionId) return;
+
+    let colorMode = "grayscale";
+    const selectedInput = document.querySelector("input[name='printColorMode']:checked");
+    if (selectedInput) {
+      colorMode = selectedInput.value;
+    }
+
+    closePrintModal();
+
+    if (printButton) {
+      setButtonLoading(printButton, true, "Printing...");
+    }
+    const modeText = colorMode === "grayscale" ? "grayscale" : "color";
+    setMessage(elements.historyMessage, `Sending ${modeText} document to office printer...`);
 
     try {
       const response = await api(`/api/submissions/${encodeURIComponent(submissionId)}/print`, {
-        method: "POST"
+        method: "POST",
+        body: JSON.stringify({ colorMode })
       });
       setMessage(elements.historyMessage, response.message || "Sent to printer successfully.", "success");
     } catch (error) {
       setMessage(elements.historyMessage, error.message || "Failed to print document.", "error");
     } finally {
-      setButtonLoading(printButton, false);
+      if (printButton) {
+        setButtonLoading(printButton, false);
+      }
     }
+  });
+}
+
+elements.historyRows.addEventListener("click", async event => {
+  const printButton = event.target.closest("[data-print-submission]");
+  if (printButton) {
+    const submissionId = printButton.dataset.printSubmission;
+    openPrintModal(submissionId, printButton);
     return;
   }
 

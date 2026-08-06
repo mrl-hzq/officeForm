@@ -286,7 +286,23 @@ def print_submission(submission_id: str):
     if not pdf_path.is_file():
         return jsonify({"error": f"PDF file '{pdf_file_name}' does not exist and could not be generated."}), 404
 
-    success, msg = print_service.send_to_printer(pdf_path)
+    body = request.get_json(silent=True) or {}
+    form_type = row.get("form_type")
+
+    duplex = body.get("duplex")
+    remove_pages = body.get("removePages")
+    color_mode = body.get("colorMode") or body.get("color_mode") or "grayscale"
+
+    if form_type == "KPI":
+        if duplex is None:
+            duplex = "short-edge"
+
+    success, msg = print_service.send_to_printer(
+        pdf_path,
+        duplex=duplex,
+        remove_pages=remove_pages,
+        color_mode=color_mode,
+    )
     if not success:
         return jsonify({"error": msg}), 500
 
