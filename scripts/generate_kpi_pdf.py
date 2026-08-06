@@ -574,13 +574,23 @@ def generate_kpi_pdf(
         _set_merged_value(actions, cell_address, comments.get(section_key, ""))
 
     for field_key, cell_address in KPI_OPTION_CELLS.items():
-        actions.append({
-            "kind": "cell",
-            "sheet": "MASTER",
-            "address": cell_address,
-            "value": summary_options.get(field_key, ""),
-            "numberFormat": "@",
-        })
+        val = summary_options.get(field_key, "")
+        if str(val).isdigit():
+            actions.append({
+                "kind": "cell",
+                "sheet": "MASTER",
+                "address": cell_address,
+                "value": int(val),
+                "valueType": "number",
+            })
+        else:
+            actions.append({
+                "kind": "cell",
+                "sheet": "MASTER",
+                "address": cell_address,
+                "value": val,
+                "numberFormat": "@",
+            })
 
     _set_merged_date_text(actions, "G113", application_date)
     actions.append({
